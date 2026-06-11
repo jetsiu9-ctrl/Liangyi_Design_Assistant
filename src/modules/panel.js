@@ -1229,6 +1229,19 @@
             pathInput.value = exportSettings.exportPath;
         }
         if (pathInput) {
+            pathInput.addEventListener('keydown', function(e) {
+                if ((e.key === 'Backspace' || e.key === 'Delete') && this.value) {
+                    e.preventDefault();
+                    this.value = '';
+                    if (typeof ExportModule.clearExportPath === 'function') {
+                        ExportModule.clearExportPath({ persist: true });
+                    } else {
+                        ExportModule.setState({ exportPath: '', persistentToken: '' }, { persist: true });
+                    }
+                    showToast('已清除导出位置');
+                }
+            });
+
             pathInput.addEventListener('blur', function(e) {
                 const path = this.value.trim();
                 if (path && path !== exportSettings.exportPath) {

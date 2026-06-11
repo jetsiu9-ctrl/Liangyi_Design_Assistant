@@ -73,6 +73,19 @@
             return this.getExportFolder(overrideSettings);
         },
 
+        clearExportPath(options = {}) {
+            selectedFolder = null;
+            this.settings = normalizeSettings({
+                ...this.settings,
+                exportPath: '',
+                persistentToken: ''
+            });
+            if (options.persist) {
+                this.persist();
+            }
+            return this.getState();
+        },
+
         // 选择导出位置
         async selectExportPath() {
             try {
