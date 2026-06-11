@@ -1112,11 +1112,18 @@ sp-textfield {
 }
 
 .layer-transform-buttons {
-    flex-direction: row;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.layer-transform-row {
+    display: flex;
+    gap: 6px;
+    width: 100%;
 }
 
 .layer-transform-buttons .align-btn {
-    min-height: 28px;
+    min-height: 30px;
 }
 
 .align-btn {

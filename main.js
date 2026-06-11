@@ -411,10 +411,14 @@ function getMainPanelHTML() {
                     <div class="param-group">
                         <sp-label class="param-label">图层居中</sp-label>
                         <div class="align-buttons layer-transform-buttons">
-                            <sp-button id="alignHCenterBtn" class="align-btn" variant="secondary"><sp-label>水平居中</sp-label></sp-button>
-                            <sp-button id="alignVCenterBtn" class="align-btn" variant="secondary"><sp-label>垂直居中</sp-label></sp-button>
-                            <sp-button id="fontScaleUpBtn" class="align-btn" variant="secondary"><sp-label>放大</sp-label></sp-button>
-                            <sp-button id="fontScaleDownBtn" class="align-btn" variant="secondary"><sp-label>缩小</sp-label></sp-button>
+                            <div class="layer-transform-row">
+                                <sp-button id="alignHCenterBtn" class="align-btn" variant="secondary"><sp-label>水平居中</sp-label></sp-button>
+                                <sp-button id="alignVCenterBtn" class="align-btn" variant="secondary"><sp-label>垂直居中</sp-label></sp-button>
+                            </div>
+                            <div class="layer-transform-row">
+                                <sp-button id="fontScaleUpBtn" class="align-btn" variant="secondary"><sp-label>放大</sp-label></sp-button>
+                                <sp-button id="fontScaleDownBtn" class="align-btn" variant="secondary"><sp-label>缩小</sp-label></sp-button>
+                            </div>
                         </div>
                     </div>
 
