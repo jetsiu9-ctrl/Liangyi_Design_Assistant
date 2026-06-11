@@ -283,6 +283,10 @@
         return TranslateModule.setState(nextSettings, { persist });
     }
 
+    function syncTranslateUIToSettings() {
+        return commitTranslateFormState({ persist: false });
+    }
+
     function setPickerSelected(pickerSelector, value) {
         const picker = rootNode.querySelector(pickerSelector);
         if (!picker) return;
@@ -1110,7 +1114,7 @@
             ExportModule.init();
 
             // 初始化 UI 控件
-            initControls();
+            await initControls();
 
             // 绑定事件
             bindEvents();
@@ -1180,7 +1184,7 @@
     }
 
         // 初始化控件
-    function initControls() {
+    async function initControls() {
         // 初始化导出控件
         initExportControls();
 
@@ -1197,7 +1201,7 @@
         initFontControls();
 
         // 初始化百度翻译控件
-        initTranslateControls();
+        await initTranslateControls();
     }
 
     // 初始化导出控件
@@ -2182,11 +2186,23 @@
         const saveTranslateConfigBtn = rootNode.querySelector('#saveTranslateConfigBtn');
         if (saveTranslateConfigBtn) {
             saveTranslateConfigBtn.addEventListener('click', async function() {
-                syncTranslateUIToSettings();
-                if (window.TranslateModule && typeof TranslateModule.persist === 'function') {
-                    await TranslateModule.persist();
+                try {
+                    const nextSettings = syncTranslateUIToSettings();
+                    if (!nextSettings) {
+                        throw new Error('请先填写百度翻译配置');
+                    }
+
+                    if (window.TranslateModule && typeof TranslateModule.persist === 'function') {
+                        const saved = await TranslateModule.persist();
+                        if (!saved) {
+                            throw new Error('配置写入失败');
+                        }
+                    }
+                    showToast('配置已保存');
+                } catch (e) {
+                    console.error('[Panel] 保存百度翻译配置失败:', e);
+                    showToast('保存配置失败: ' + e.message);
                 }
-                showToast('配置已保存');
             });
 
             saveTranslateConfigBtn.addEventListener('keydown', (e) => {
