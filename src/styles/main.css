@@ -1111,6 +1111,14 @@ sp-textfield {
     border: 1px solid rgba(255, 255, 255, 0.075);
 }
 
+.layer-transform-buttons {
+    flex-direction: row;
+}
+
+.layer-transform-buttons .align-btn {
+    min-height: 28px;
+}
+
 .align-btn {
     flex: 1;
     min-width: 0;

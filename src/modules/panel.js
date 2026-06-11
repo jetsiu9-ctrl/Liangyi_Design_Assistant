@@ -1917,6 +1917,8 @@
         // ==========================================
         const alignHCenterBtn = rootNode.querySelector('#alignHCenterBtn');
         const alignVCenterBtn = rootNode.querySelector('#alignVCenterBtn');
+        const fontScaleUpBtn = rootNode.querySelector('#fontScaleUpBtn');
+        const fontScaleDownBtn = rootNode.querySelector('#fontScaleDownBtn');
 
         const alignLayerToCanvas = async (direction) => {
             try {
@@ -1988,8 +1990,76 @@
             }
         };
 
+        const buildLayerScaleCommand = (widthPercent, heightPercent, horizontalOffset) => ({
+            _obj: 'transform',
+            _target: [
+                {
+                    _enum: 'ordinal',
+                    _ref: 'layer',
+                    _value: 'targetEnum'
+                }
+            ],
+            freeTransformCenterState: {
+                _enum: 'quadCenterState',
+                _value: 'QCSAverage'
+            },
+            height: {
+                _unit: 'percentUnit',
+                _value: heightPercent
+            },
+            interfaceIconFrameDimmed: {
+                _enum: 'interpolationType',
+                _value: 'bicubic'
+            },
+            linked: true,
+            offset: {
+                _obj: 'offset',
+                horizontal: {
+                    _unit: 'pixelsUnit',
+                    _value: horizontalOffset
+                },
+                vertical: {
+                    _unit: 'pixelsUnit',
+                    _value: 0.0
+                }
+            },
+            width: {
+                _unit: 'percentUnit',
+                _value: widthPercent
+            }
+        });
+
+        const scaleActiveLayer = async (mode) => {
+            const isScaleUp = mode === 'up';
+            try {
+                const { app, core, action } = require('photoshop');
+                if (!app.activeDocument) {
+                    showToast('没有活动文档');
+                    return;
+                }
+
+                const command = isScaleUp
+                    ? buildLayerScaleCommand(105.0, 104.99999523162842, 0.0)
+                    : buildLayerScaleCommand(95.0, 94.99999880790712, 5.684341886080802e-14);
+                const commandName = isScaleUp ? '图层放大 5%' : '图层缩小 5%';
+
+                await core.executeAsModal(async () => {
+                    await action.batchPlay([command], {
+                        dialogOptions: 'dontDisplay'
+                    });
+                }, { commandName });
+
+                showToast(isScaleUp ? '已放大当前图层' : '已缩小当前图层');
+            } catch (e) {
+                console.error('[Panel] 图层缩放失败:', e);
+                showToast('图层缩放失败: ' + e.message);
+            }
+        };
+
         if (alignHCenterBtn) { alignHCenterBtn.addEventListener('click', () => alignLayerToCanvas('horizontal')); }
         if (alignVCenterBtn) { alignVCenterBtn.addEventListener('click', () => alignLayerToCanvas('vertical')); }
+        if (fontScaleUpBtn) { fontScaleUpBtn.addEventListener('click', () => scaleActiveLayer('up')); }
+        if (fontScaleDownBtn) { fontScaleDownBtn.addEventListener('click', () => scaleActiveLayer('down')); }
     }
 
     // 绑定事件

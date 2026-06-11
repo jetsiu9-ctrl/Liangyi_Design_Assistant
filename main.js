@@ -409,10 +409,12 @@ function getMainPanelHTML() {
                     </div>
 
                     <div class="param-group">
-                        <label class="param-label">图层居中</label>
-                        <div class="align-buttons">
-                            <button id="alignHCenterBtn" class="align-btn">水平居中</button>
-                            <button id="alignVCenterBtn" class="align-btn">垂直居中</button>
+                        <sp-label class="param-label">图层居中</sp-label>
+                        <div class="align-buttons layer-transform-buttons">
+                            <sp-button id="alignHCenterBtn" class="align-btn" variant="secondary"><sp-label>水平居中</sp-label></sp-button>
+                            <sp-button id="alignVCenterBtn" class="align-btn" variant="secondary"><sp-label>垂直居中</sp-label></sp-button>
+                            <sp-button id="fontScaleUpBtn" class="align-btn" variant="secondary"><sp-label>放大</sp-label></sp-button>
+                            <sp-button id="fontScaleDownBtn" class="align-btn" variant="secondary"><sp-label>缩小</sp-label></sp-button>
                         </div>
                     </div>
 
