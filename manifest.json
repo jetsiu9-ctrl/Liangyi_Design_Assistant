@@ -1,0 +1,59 @@
+{
+    "id": "com.liangyi.designAssistant",
+    "name": "凉意设计助理",
+    "version": "1.0.0",
+    "main": "index.html",
+    "manifestVersion": 6,
+    "host": {
+        "app": "PS",
+        "minVersion": "25.0"
+    },
+    "entrypoints": [
+        {
+            "type": "panel",
+            "id": "HaimatiPanel",
+            "label": "设计助理",
+            "minimumSize": { "width": 300, "height": 800 },
+            "maximumSize": { "width": 600, "height": 99999 },
+            "preferredDockedSize": { "width": 360, "height": 800 }
+        },
+        {
+            "type": "panel",
+            "id": "QuickAccessPanel",
+            "label": "快捷操作",
+            "minimumSize": { "width": 80, "height": 100 },
+            "maximumSize": { "width": 400, "height": 99999 },
+            "preferredDockedSize": { "width": 180, "height": 300 }
+        },
+        {
+            "type": "panel",
+            "id": "ColorPanel",
+            "label": "颜色面板",
+            "minimumSize": { "width": 24, "height": 60 },
+            "maximumSize": { "width": 600, "height": 99999 },
+            "preferredDockedSize": { "width": 40, "height": 200 }
+        }
+    ],
+    "requiredPermissions": {
+        "localFileSystem": "fullAccess",
+        "ipc": {
+            "enablePluginCommunication": true
+        },
+        "network": {
+            "domains": [
+                "https://fanyi-api.baidu.com"
+            ]
+        }
+    },
+    "permissions": [
+        "document.read",
+        "document.write",
+        "layer.copy",
+        "layer.read",
+        "layer.write",
+        "filesystem"
+    ],
+    "featureFlags": {
+        "enableSWCSupport": true
+    }
+}
