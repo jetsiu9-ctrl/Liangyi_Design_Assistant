@@ -206,7 +206,7 @@
 
                 return this.settings.batchExport
                     ? await this.batchExportLayers(activeDocument, folder)
-                    : await this.exportDocument(activeDocument, folder);
+                    : await this.exportSlices(activeDocument, folder);
             } finally {
                 this.settings = previousSettings;
             }
@@ -315,7 +315,7 @@
                 if (this.settings.batchExport) {
                     return await this.batchExportLayers(doc, targetFolder);
                 } else {
-                    return await this.exportDocument(doc, targetFolder);
+                    return await this.exportSlices(doc, targetFolder);
                 }
             } catch (e) {
                 console.error('[ExportModule] 源文件路径导出失败:', e);
@@ -409,6 +409,239 @@
         shouldUseSaveForWeb() {
             return this.settings.format === 'JPEG'
                 || (this.settings.format === 'PNG' && this.settings.pngBitDepth === 8);
+        },
+
+        joinNativePath(folderPath, fileName) {
+            const cleanFolderPath = String(folderPath || '').replace(/[\\/]+$/, '');
+            if (!cleanFolderPath) {
+                return fileName;
+            }
+            const separator = cleanFolderPath.includes('\\') ? '\\' : '/';
+            return `${cleanFolderPath}${separator}${fileName}`;
+        },
+
+        getSliceExportFileName(doc) {
+            return this.generateFileName(doc, null, 0);
+        },
+
+        getSliceExportImagesPath(folder, fileName) {
+            const imagesPath = this.joinNativePath(folder.nativePath, 'images');
+            return this.joinNativePath(imagesPath, fileName);
+        },
+
+        getSliceOutputNameComponents(isOverride = false) {
+            const values = isOverride
+                ? ['$NC01', '$NC20', '$NC02', '$NC19', '$NC06', '$NC24', '$NC24', '$NC24', '$NC22']
+                : ['$NC00', '$NC19', '$NC28', '$NC24', '$NC24', '$NC24'];
+            return values.map(value => ({
+                _obj: '$SCnc',
+                $ncTp: {
+                    _enum: '$STnc',
+                    _value: value
+                }
+            }));
+        },
+
+        buildSliceExportDescriptor(folderToken, folder, fileName) {
+            if (this.settings.format === 'JPEG') {
+                return this.buildSliceJpegDescriptor(folderToken, folder, fileName);
+            }
+
+            if (this.settings.format === 'PNG' && this.settings.pngBitDepth === 8) {
+                return this.buildSlicePng8Descriptor(folderToken, folder, fileName);
+            }
+
+            return this.buildSlicePng24Descriptor(folderToken, folder, fileName);
+        },
+
+        buildSliceJpegDescriptor(folderToken, folder, fileName) {
+            return {
+                _obj: 'export',
+                using: {
+                    _obj: 'SaveForWeb',
+                    $DIDr: true,
+                    $EICC: false,
+                    $Mtt: false,
+                    $MttB: 255,
+                    $MttG: 255,
+                    $MttR: 255,
+                    $Op: { _enum: '$SWOp', _value: '$OpSa' },
+                    $Pass: 1,
+                    $QCUI: 0,
+                    $QChS: 0,
+                    $QChT: false,
+                    $QChV: false,
+                    $SHTM: false,
+                    $SImg: true,
+                    $SWch: { _enum: '$STch', _value: '$CHsR' },
+                    $SWmd: { _enum: '$STmd', _value: '$MDCC' },
+                    $SWsl: { _enum: '$STsl', _value: '$SLAl' },
+                    $obCS: { _enum: '$STcs', _value: '$CS01' },
+                    $obIA: false,
+                    $obIP: '',
+                    $ohAA: true,
+                    $ohAC: { _enum: '$SToc', _value: '$OC03' },
+                    $ohCA: false,
+                    $ohEn: { _enum: '$STen', _value: '$EN00' },
+                    $ohIC: true,
+                    $ohIZ: true,
+                    $ohIn: -1,
+                    $ohLE: { _enum: '$STle', _value: '$LE03' },
+                    $ohQA: true,
+                    $ohTC: { _enum: '$SToc', _value: '$OC03' },
+                    $ohXH: false,
+                    $olCS: false,
+                    $olEC: { _enum: '$STst', _value: '$ST00' },
+                    $olNC: this.getSliceOutputNameComponents(),
+                    $olSH: { _enum: '$STsp', _value: '$SP04' },
+                    $olSV: { _enum: '$STsp', _value: '$SP04' },
+                    $olWH: { _enum: '$STwh', _value: '$WH01' },
+                    $ovCB: true,
+                    $ovCM: false,
+                    $ovCU: true,
+                    $ovCW: true,
+                    $ovFN: fileName,
+                    $ovNC: this.getSliceOutputNameComponents(true),
+                    $ovSF: true,
+                    $ovSN: 'images',
+                    blur: 0,
+                    format: { _enum: '$IRFm', _value: 'JPEG' },
+                    in: {
+                        _kind: 'local',
+                        _path: folderToken
+                    },
+                    interfaceIconFrameDimmed: false,
+                    optimized: true,
+                    pathName: this.getSliceExportImagesPath(folder, fileName),
+                    quality: this.getSaveForWebJpegQuality()
+                }
+            };
+        },
+
+        buildSlicePng8Descriptor(folderToken, folder, fileName) {
+            return {
+                _obj: 'export',
+                using: {
+                    _obj: 'SaveForWeb',
+                    $AuRd: false,
+                    $DCUI: 0,
+                    $DChS: 0,
+                    $DChT: false,
+                    $DChV: false,
+                    $DIDr: true,
+                    $EICC: false,
+                    $Mtt: false,
+                    $MttB: 255,
+                    $MttG: 255,
+                    $MttR: 255,
+                    $NCol: 256,
+                    $Op: { _enum: '$SWOp', _value: '$OpSa' },
+                    $RChT: false,
+                    $RChV: false,
+                    $RedA: { _enum: '$IRRd', _value: '$Sltv' },
+                    $SHTM: false,
+                    $SImg: true,
+                    $SWch: { _enum: '$STch', _value: '$CHsR' },
+                    $SWmd: { _enum: '$STmd', _value: '$MDCC' },
+                    $SWsl: { _enum: '$STsl', _value: '$SLAl' },
+                    $TDtA: 100,
+                    $TDth: { _enum: '$IRDt', _value: 'none' },
+                    $WebS: 0,
+                    $obCS: { _enum: '$STcs', _value: '$CS01' },
+                    $obIA: false,
+                    $obIP: '',
+                    $ohAA: true,
+                    $ohAC: { _enum: '$SToc', _value: '$OC03' },
+                    $ohCA: false,
+                    $ohEn: { _enum: '$STen', _value: '$EN00' },
+                    $ohIC: true,
+                    $ohIZ: true,
+                    $ohIn: -1,
+                    $ohLE: { _enum: '$STle', _value: '$LE03' },
+                    $ohQA: true,
+                    $ohTC: { _enum: '$SToc', _value: '$OC03' },
+                    $ohXH: false,
+                    $olCS: false,
+                    $olEC: { _enum: '$STst', _value: '$ST00' },
+                    $olNC: this.getSliceOutputNameComponents(),
+                    $olSH: { _enum: '$STsp', _value: '$SP04' },
+                    $olSV: { _enum: '$STsp', _value: '$SP04' },
+                    $olWH: { _enum: '$STwh', _value: '$WH01' },
+                    $ovCB: true,
+                    $ovCM: false,
+                    $ovCU: true,
+                    $ovCW: true,
+                    $ovNC: this.getSliceOutputNameComponents(true),
+                    $ovSF: true,
+                    $ovSN: 'images',
+                    dither: { _enum: '$IRDt', _value: 'diffusion' },
+                    ditherAmount: 100,
+                    format: { _enum: '$IRFm', _value: '$PNG8' },
+                    in: {
+                        _kind: 'local',
+                        _path: folderToken
+                    },
+                    interfaceIconFrameDimmed: true,
+                    pathName: this.joinNativePath(folder.nativePath, fileName),
+                    transparency: true
+                }
+            };
+        },
+
+        buildSlicePng24Descriptor(folderToken, folder, fileName) {
+            return {
+                _obj: 'export',
+                using: {
+                    _obj: 'SaveForWeb',
+                    $DIDr: true,
+                    $EICC: false,
+                    $Mtt: false,
+                    $MttB: 255,
+                    $MttG: 255,
+                    $MttR: 255,
+                    $Op: { _enum: '$SWOp', _value: '$OpSa' },
+                    $SHTM: false,
+                    $SImg: true,
+                    $SWch: { _enum: '$STch', _value: '$CHsR' },
+                    $SWmd: { _enum: '$STmd', _value: '$MDCC' },
+                    $SWsl: { _enum: '$STsl', _value: '$SLAl' },
+                    $obCS: { _enum: '$STcs', _value: '$CS01' },
+                    $obIA: false,
+                    $obIP: '',
+                    $ohAA: true,
+                    $ohAC: { _enum: '$SToc', _value: '$OC03' },
+                    $ohCA: false,
+                    $ohEn: { _enum: '$STen', _value: '$EN00' },
+                    $ohIC: true,
+                    $ohIZ: true,
+                    $ohIn: -1,
+                    $ohLE: { _enum: '$STle', _value: '$LE03' },
+                    $ohQA: true,
+                    $ohTC: { _enum: '$SToc', _value: '$OC03' },
+                    $ohXH: false,
+                    $olCS: false,
+                    $olEC: { _enum: '$STst', _value: '$ST00' },
+                    $olNC: this.getSliceOutputNameComponents(),
+                    $olSH: { _enum: '$STsp', _value: '$SP04' },
+                    $olSV: { _enum: '$STsp', _value: '$SP04' },
+                    $olWH: { _enum: '$STwh', _value: '$WH01' },
+                    $ovCB: true,
+                    $ovCM: false,
+                    $ovCU: true,
+                    $ovCW: true,
+                    $ovNC: this.getSliceOutputNameComponents(true),
+                    $ovSF: true,
+                    $ovSN: 'images',
+                    format: { _enum: '$IRFm', _value: '$PN24' },
+                    in: {
+                        _kind: 'local',
+                        _path: folderToken
+                    },
+                    interfaceIconFrameDimmed: false,
+                    pathName: this.joinNativePath(folder.nativePath, fileName),
+                    transparency: true
+                }
+            };
         },
 
         // 构建 SaveForWeb 导出描述符
@@ -692,6 +925,29 @@
         },
 
         // 导出整个文档（使用存储为Web格式）
+        async exportSlices(doc, folder) {
+            const photoshop = require('photoshop');
+            const { action } = photoshop;
+            const { storage } = require('uxp');
+            const fs = storage.localFileSystem;
+            const folderToken = await fs.createSessionToken(folder);
+            const fileName = this.getSliceExportFileName(doc);
+            const descriptor = this.buildSliceExportDescriptor(folderToken, folder, fileName);
+
+            console.log('[ExportModule] start slice export:', fileName, 'format:', this.settings.format, 'folder:', folder.nativePath);
+
+            await action.batchPlay([descriptor], {
+                dialogOptions: 'dontDisplay'
+            });
+
+            return {
+                success: true,
+                filename: fileName,
+                path: folder.nativePath,
+                sliced: true
+            };
+        },
+
         async exportDocument(doc, folder) {
             const photoshop = require('photoshop');
             const { action } = photoshop;
