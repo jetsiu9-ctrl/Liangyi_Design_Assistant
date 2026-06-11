@@ -2778,7 +2778,7 @@
     function updateSourcePathVisibility() {
         const sourceFolderGroup = rootNode.querySelector('#sourceFolderNameGroup');
         if (sourceFolderGroup) {
-            sourceFolderGroup.style.display = ExportModule.getState().useSourcePath ? 'block' : 'none';
+            sourceFolderGroup.style.display = '';
         }
     }
 

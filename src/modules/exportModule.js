@@ -204,9 +204,11 @@
                     throw new Error('请先选择导出位置');
                 }
 
+                const targetFolder = await this.getTargetFolder(folder);
+
                 return this.settings.batchExport
-                    ? await this.batchExportLayers(activeDocument, folder)
-                    : await this.exportSlices(activeDocument, folder);
+                    ? await this.batchExportLayers(activeDocument, targetFolder)
+                    : await this.exportSlices(activeDocument, targetFolder);
             } finally {
                 this.settings = previousSettings;
             }
@@ -302,14 +304,7 @@
                     throw new Error('无法获取源文件夹');
                 }
 
-                // 创建子文件夹（如果指定了名称）
-                let targetFolder = folder;
-                if (this.settings.sourceFolderName && this.settings.sourceFolderName.trim()) {
-                    const subFolderName = this.settings.sourceFolderName.trim();
-                    console.log('[ExportModule] 创建子文件夹:', subFolderName);
-                    targetFolder = await this.getOrCreateSubFolder(folder, subFolderName);
-                    console.log('[ExportModule] 子文件夹创建成功:', targetFolder.nativePath);
-                }
+                const targetFolder = await this.getTargetFolder(folder);
 
                 // 执行导出
                 if (this.settings.batchExport) {
@@ -1068,6 +1063,18 @@
         },
 
         // 获取或创建子文件夹（根据覆盖设置）
+        async getTargetFolder(baseFolder) {
+            const subFolderName = String(this.settings.sourceFolderName || '').trim();
+            if (!subFolderName) {
+                return baseFolder;
+            }
+
+            console.log('[ExportModule] create export subfolder:', subFolderName);
+            const targetFolder = await this.getOrCreateSubFolder(baseFolder, subFolderName);
+            console.log('[ExportModule] export subfolder ready:', targetFolder.nativePath);
+            return targetFolder;
+        },
+
         async getOrCreateSubFolder(parentFolder, baseName) {
             const fs = require('uxp').storage.localFileSystem;
             

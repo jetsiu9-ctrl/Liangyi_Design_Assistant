@@ -180,8 +180,8 @@ function getMainPanelHTML() {
                     </div>
 
                     <!-- 源文件子文件夹名称 -->
-                    <div id="sourceFolderNameGroup" class="param-group" style="display: none;">
-                        <label class="param-label">子文件夹名称</label>
+                    <div id="sourceFolderNameGroup" class="param-group">
+                        <sp-label class="param-label">子文件夹名称</sp-label>
                         <sp-textfield id="sourceFolderName" placeholder="输入子文件夹名称..."></sp-textfield>
                     </div>
 
