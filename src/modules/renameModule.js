@@ -266,7 +266,8 @@
         const { app, action, core } = photoshop;
 
         try {
-            const result = await core.executeAsModal(async () => {
+            // 核心修改点：传入 executionContext 参数
+            const result = await core.executeAsModal(async (executionContext) => {
                 const doc = app.activeDocument;
                 if (!doc) {
                     throw new Error('没有活动文档');
@@ -279,41 +280,58 @@
                     throw new Error('没有可重命名的选中图层（组内的子图层会被忽略）');
                 }
 
-                console.log(`[RenameModule] 开始重命名 ${selectedLayers.length} 个图层`);
+                // 核心修改点：挂起历史记录流，合并为单一状态点
+                const historyName = '批量重命名图层';
+                const historySuspension = await executionContext.hostControl.suspendHistory({
+                    documentID: doc.id,
+                    name: historyName
+                });
 
-                for (let i = 0; i < selectedLayers.length; i++) {
-                    const layer = selectedLayers[i];
-                    const newName = generateNewName(
-                        settings.baseName.trim(),
-                        settings.position,
-                        settings.addSequence,
-                        settings.sequenceStart,
-                        i
-                    );
+                try {
+                    console.log(`[RenameModule] 开始重命名 ${selectedLayers.length} 个图层`);
 
-                    await action.batchPlay([{
-                        "_obj": "set",
-                        "_target": [
-                            {
-                                "_ref": "layer",
-                                "_id": layer.id
+                    for (let i = 0; i < selectedLayers.length; i++) {
+                        const layer = selectedLayers[i];
+                        const newName = generateNewName(
+                            settings.baseName.trim(),
+                            settings.position,
+                            settings.addSequence,
+                            settings.sequenceStart,
+                            i
+                        );
+
+                        await action.batchPlay([{
+                            "_obj": "set",
+                            "_target": [
+                                {
+                                    "_ref": "layer",
+                                    "_id": layer.id
+                                }
+                            ],
+                            "to": {
+                                "_obj": "layer",
+                                "name": newName
                             }
-                        ],
-                        "to": {
-                            "_obj": "layer",
-                            "name": newName
-                        }
-                    }], {
-                        "dialogOptions": "dontDisplay"
-                    });
+                        }], {
+                            "dialogOptions": "dontDisplay"
+                        });
 
-                    console.log(`[RenameModule] 重命名图层: ${layer.name} -> ${newName}`);
+                        console.log(`[RenameModule] 重命名图层: ${layer.name} -> ${newName}`);
+                    }
+
+                    // 核心修改点：执行成功，提交并合并
+                    historySuspension.finalName = historyName;
+                    await executionContext.hostControl.resumeHistory(historySuspension, true);
+
+                    return {
+                        success: true,
+                        count: selectedLayers.length
+                    };
+                } catch (error) {
+                    // 核心修改点：中途遭遇异常，彻底回滚挂起区间内的所有破坏性更名
+                    await executionContext.hostControl.resumeHistory(historySuspension, false);
+                    throw error;
                 }
-
-                return {
-                    success: true,
-                    count: selectedLayers.length
-                };
             }, {
                 "commandName": "批量重命名图层"
             });
