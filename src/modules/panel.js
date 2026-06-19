@@ -221,14 +221,38 @@
         const styles = FontModule.getStylesByFamily(familyValue);
         const selectedStyle = styles.find(item => item.postScriptName === selectedPostScriptName);
 
-        let fontSize = null;
+        const currentFontSettings = FontModule.getState();
+        const readMetricInputValue = (input) => {
+            const directValue = input?.value;
+            const cachedValue = input?.dataset?.metricValue;
+            return String(directValue ?? '').trim() !== '' ? directValue : cachedValue;
+        };
+
+        const readNumberInput = (selector, minValue, maxValue, fallbackValue = null) => {
+            const input = rootNode.querySelector(selector);
+            const rawValue = readMetricInputValue(input);
+            if (!input || String(rawValue ?? '').trim() === '') {
+                return fallbackValue;
+            }
+            const inputValue = parseFloat(rawValue);
+            if (Number.isFinite(inputValue) && inputValue >= minValue && inputValue <= maxValue) {
+                return inputValue;
+            }
+            return fallbackValue;
+        };
+
+        let fontSize = currentFontSettings.fontSize ?? null;
         const fontSizeInput = rootNode.querySelector('#fontSizeInput');
-        if (fontSizeInput) {
-            const inputValue = parseInt(fontSizeInput.value, 10);
+        const fontSizeRawValue = readMetricInputValue(fontSizeInput);
+        if (fontSizeInput && String(fontSizeRawValue ?? '').trim() !== '') {
+            const inputValue = parseInt(fontSizeRawValue, 10);
             if (inputValue >= 1 && inputValue <= 999) {
                 fontSize = inputValue;
             }
         }
+        const tracking = readNumberInput('#fontTrackingInput', -1000, 1000, currentFontSettings.tracking ?? null);
+        const horizontalScale = readNumberInput('#fontHorizontalScaleInput', 0, 1000, currentFontSettings.horizontalScale ?? null);
+        const verticalScale = readNumberInput('#fontVerticalScaleInput', 0, 1000, currentFontSettings.verticalScale ?? null);
 
         return {
             family: familyValue,
@@ -236,7 +260,10 @@
             postScriptName: selectedPostScriptName,
             searchKeyword: searchInput ? searchInput.value.trim() : '',
             realtime,
-            fontSize
+            fontSize,
+            tracking,
+            horizontalScale,
+            verticalScale
         };
     }
 
@@ -717,6 +744,10 @@
 
         // "全部功能"面板不允许添加快捷方式
         if (panelType === 'home') {
+            return;
+        }
+
+        if (panelType === 'aiGenerate' || panelType === 'aiSettings') {
             return;
         }
 
@@ -1376,6 +1407,18 @@
                 fontSizeInput.value = settings.fontSize;
             }
         }
+        const fontTrackingInput = rootNode.querySelector('#fontTrackingInput');
+        if (fontTrackingInput && settings.tracking !== null && settings.tracking !== undefined) {
+            fontTrackingInput.value = settings.tracking;
+        }
+        const fontHorizontalScaleInput = rootNode.querySelector('#fontHorizontalScaleInput');
+        if (fontHorizontalScaleInput && settings.horizontalScale !== null && settings.horizontalScale !== undefined) {
+            fontHorizontalScaleInput.value = settings.horizontalScale;
+        }
+        const fontVerticalScaleInput = rootNode.querySelector('#fontVerticalScaleInput');
+        if (fontVerticalScaleInput && settings.verticalScale !== null && settings.verticalScale !== undefined) {
+            fontVerticalScaleInput.value = settings.verticalScale;
+        }
 
         const availableGroups = FontModule.filterGroupedFonts(settings.searchKeyword || '');
         const currentFamilyExists = availableGroups.some(group => group.family === settings.family);
@@ -1516,6 +1559,20 @@
             : String(Number(fontSize.toFixed(2)));
     }
 
+    function normalizeMetricValue(value) {
+        const numericValue = normalizeDescriptorNumber(value);
+        return numericValue === null ? null : numericValue;
+    }
+
+    function formatMetricValue(value, suffix = '') {
+        const numericValue = normalizeMetricValue(value);
+        if (numericValue === null) return '未识别';
+        const text = Number.isInteger(numericValue)
+            ? String(numericValue)
+            : String(Number(numericValue.toFixed(2)));
+        return `${text}${suffix}`;
+    }
+
     function extractFontSizeFromTextKey(textKey) {
         const textStyleRange = Array.isArray(textKey?.textStyleRange) ? textKey.textStyleRange : [];
 
@@ -1535,20 +1592,39 @@
             || normalizeFontSizeValue(textItem?.characterStyle?.size);
     }
 
+    function readDomMetric(characterStyle, key) {
+        return normalizeMetricValue(characterStyle?.[key]);
+    }
+
     function updateFontSelectionInfo() {
         const infoNode = rootNode.querySelector('#fontSelectionInfo');
         if (!infoNode) return;
 
-        infoNode.innerHTML = `<sp-label class="font-selection-meta current-font-size-label">当前字号：${escapeHtml(formatFontSizeValue(rootNode.__detectedFontSize))}</sp-label>`;
+        const metrics = rootNode.__detectedFontMetrics || {};
+        infoNode.innerHTML = `
+            <div class="font-selection-metrics">
+                <sp-label class="font-selection-meta current-font-size-label">字号：${escapeHtml(formatFontSizeValue(metrics.fontSize ?? rootNode.__detectedFontSize))}</sp-label>
+                <sp-label class="font-selection-meta current-font-size-label">字距：${escapeHtml(formatMetricValue(metrics.tracking))}</sp-label>
+                <sp-label class="font-selection-meta current-font-size-label">水平缩放：${escapeHtml(formatMetricValue(metrics.horizontalScale, '%'))}</sp-label>
+                <sp-label class="font-selection-meta current-font-size-label">垂直缩放：${escapeHtml(formatMetricValue(metrics.verticalScale, '%'))}</sp-label>
+            </div>
+        `;
     }
 
     async function triggerRealtimeFontApply() {
         if (!window.FontModule) return;
 
         const settings = FontModule.getState();
-        const isOpticalKerning = rootNode.querySelector('#chk-optical-kerning')?.checked || false;
+        const hasManualTracking = rootNode.__manualTrackingPending === true;
+        const isOpticalKerning = !hasManualTracking && (rootNode.querySelector('#chk-optical-kerning')?.checked || false);
         const isSmoothAntialias = rootNode.querySelector('#chk-smooth-antialias')?.checked || false;
-        const shouldApplyFont = Boolean(settings.postScriptName || settings.fontSize);
+        const shouldApplyFont = Boolean(
+            settings.postScriptName
+            || settings.fontSize
+            || settings.tracking !== null
+            || settings.horizontalScale !== null
+            || settings.verticalScale !== null
+        );
         const shouldApplyTextStyle = Boolean(isOpticalKerning || isSmoothAntialias);
 
         if (!settings.realtime || (!shouldApplyFont && !shouldApplyTextStyle)) {
@@ -1567,10 +1643,15 @@
         try {
             if (shouldApplyFont) {
                 const result = await runWithPreActionSync(() => FontModule.execute());
-                if (settings.fontSize) {
-                    rootNode.__detectedFontSize = settings.fontSize;
-                    updateFontSelectionInfo();
-                }
+                rootNode.__detectedFontMetrics = {
+                    ...(rootNode.__detectedFontMetrics || {}),
+                    fontSize: settings.fontSize ?? rootNode.__detectedFontMetrics?.fontSize ?? null,
+                    tracking: settings.tracking ?? rootNode.__detectedFontMetrics?.tracking ?? null,
+                    horizontalScale: settings.horizontalScale ?? rootNode.__detectedFontMetrics?.horizontalScale ?? null,
+                    verticalScale: settings.verticalScale ?? rootNode.__detectedFontMetrics?.verticalScale ?? null
+                };
+                rootNode.__detectedFontSize = rootNode.__detectedFontMetrics.fontSize;
+                updateFontSelectionInfo();
                 showToast(`已应用到 ${result.updatedCount} 个文字图层`);
             }
 
@@ -1591,6 +1672,7 @@
         } finally {
             applyFontBtn.removeAttribute('loading');
             applyFontBtn.textContent = originalText;
+            rootNode.__manualTrackingPending = false;
         }
     }
 
@@ -1765,29 +1847,57 @@
     }
 
     function bindFontSizeEvents() {
-        const fontSizeInput = rootNode.querySelector('#fontSizeInput');
-        if (fontSizeInput) {
-            const applyFontSize = () => {
-                const size = parseInt(fontSizeInput.value, 10);
-                if (size >= 1 && size <= 999) {
-                    commitFontFormState({ persist: true });
-                    updateFontSelectionInfo();
-                    triggerRealtimeFontApply();
-                    fontSizeInput.value = '';
+        const metricInputs = [
+            '#fontSizeInput',
+            '#fontTrackingInput',
+            '#fontHorizontalScaleInput',
+            '#fontVerticalScaleInput'
+        ];
+
+        metricInputs.forEach((selector) => {
+            const input = rootNode.querySelector(selector);
+            if (!input) return;
+
+            const applyFontMetric = () => {
+                const rawValue = String((String(input.value ?? '').trim() !== '' ? input.value : input.dataset.metricValue) ?? '').trim();
+                const hasValue = rawValue !== '';
+                if (!hasValue) {
+                    return;
                 }
+                if (selector === '#fontTrackingInput') {
+                    rootNode.__manualTrackingPending = true;
+                }
+                commitFontFormState({ persist: true });
+                updateFontSelectionInfo();
+                triggerRealtimeFontApply();
+                input.value = '';
+                input.dataset.metricValue = '';
             };
 
-            fontSizeInput.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    applyFontSize();
+            input.addEventListener('input', function() {
+                this.dataset.metricValue = String(this.value ?? '');
+            });
+
+            input.addEventListener('beforeinput', function(e) {
+                if (e.data !== null && e.data !== undefined) {
+                    this.dataset.metricValue = `${this.value || ''}${e.data}`;
                 }
             });
 
-            fontSizeInput.addEventListener('blur', function() {
-                applyFontSize();
+            input.addEventListener('change', function() {
+                this.dataset.metricValue = String(this.value ?? '');
             });
-        }
+
+            input.addEventListener('keyup', function(e) {
+                if (e.key === 'Enter') {
+                    setTimeout(applyFontMetric, 0);
+                }
+            });
+
+            input.addEventListener('blur', function() {
+                applyFontMetric();
+            });
+        });
     }
 
     // 绑定文本段落格式对齐并精确定位恢复事件（完美支持单图层及多图层逐个隔离处理）
@@ -2085,15 +2195,16 @@
         rootNode.querySelectorAll('.nav-icon').forEach(icon => {
             icon.addEventListener('click', function(e) {
                 console.log('[Panel] 图标点击事件, ctrlKey:', e.ctrlKey, 'metaKey:', e.metaKey);
+                const panel = this.dataset.panel;
+                const noQuickAction = this.dataset.noQuickAction === 'true';
                 // Ctrl+点击创建快捷方式
-                if (e.ctrlKey || e.metaKey) {
+                if ((e.ctrlKey || e.metaKey) && !noQuickAction) {
                     e.preventDefault();
                     e.stopPropagation();
                     console.log('[Panel] Ctrl+点击，调用 createQuickAction');
                     createQuickAction();
                 } else {
                     // 普通点击切换面板
-                    const panel = this.dataset.panel;
                     switchPanel(panel);
                 }
             });
@@ -2280,29 +2391,46 @@
                 try {
                     commitFontFormState({ persist: true });
                     const settings = FontModule.getState();
-                    const isOpticalKerning = rootNode.querySelector('#chk-optical-kerning')?.checked || false;
+                    const hasManualTracking = rootNode.__manualTrackingPending === true
+                        || String(rootNode.querySelector('#fontTrackingInput')?.value ?? '').trim() !== '';
+                    const isOpticalKerning = !hasManualTracking && (rootNode.querySelector('#chk-optical-kerning')?.checked || false);
                     const isSmoothAntialias = rootNode.querySelector('#chk-smooth-antialias')?.checked || false;
-                    const shouldApplyFont = Boolean(settings.postScriptName || settings.fontSize);
+                    const shouldApplyFont = Boolean(
+                        settings.postScriptName
+                        || settings.fontSize
+                        || settings.tracking !== null
+                        || settings.horizontalScale !== null
+                        || settings.verticalScale !== null
+                    );
                     const shouldApplyTextStyle = Boolean(isOpticalKerning || isSmoothAntialias);
 
                     if (!shouldApplyFont && !shouldApplyTextStyle) {
-                        throw new Error('请先选择字体样式、字号或字符样式选项');
+                        throw new Error('请先选择字体样式、字号、字距、缩放或字符样式选项');
                     }
 
                     if (shouldApplyFont) {
                         const result = await runWithPreActionSync(() => FontModule.execute());
-                        if (settings.fontSize) {
-                            rootNode.__detectedFontSize = settings.fontSize;
-                            updateFontSelectionInfo();
-                        }
+                        rootNode.__detectedFontMetrics = {
+                            ...(rootNode.__detectedFontMetrics || {}),
+                            fontSize: settings.fontSize ?? rootNode.__detectedFontMetrics?.fontSize ?? null,
+                            tracking: settings.tracking ?? rootNode.__detectedFontMetrics?.tracking ?? null,
+                            horizontalScale: settings.horizontalScale ?? rootNode.__detectedFontMetrics?.horizontalScale ?? null,
+                            verticalScale: settings.verticalScale ?? rootNode.__detectedFontMetrics?.verticalScale ?? null
+                        };
+                        rootNode.__detectedFontSize = rootNode.__detectedFontMetrics.fontSize;
+                        updateFontSelectionInfo();
                         showToast(`已应用到 ${result.updatedCount} 个文字图层`);
                     }
 
                     if (shouldApplyTextStyle) {
                         if (typeof FontModule.applyTextStyleOptions === 'function') {
                             const styleResult = await FontModule.applyTextStyleOptions(isOpticalKerning, isSmoothAntialias);
-                            if (!shouldApplyFont && styleResult?.updatedCount) {
-                                showToast(`已应用字符样式到 ${styleResult.updatedCount} 个文字图层`);
+                            if (!shouldApplyFont) {
+                                if (styleResult?.updatedCount) {
+                                    showToast(`已应用字符样式到 ${styleResult.updatedCount} 个文字图层`);
+                                } else if (styleResult?.alreadyApplied) {
+                                    showToast('字符样式已是目标状态');
+                                }
                             }
                         }
                     }
@@ -2312,6 +2440,7 @@
                 } finally {
                     this.removeAttribute('loading');
                     this.textContent = originalText;
+                    rootNode.__manualTrackingPending = false;
                 }
             });
 
@@ -2756,6 +2885,7 @@
             const doc = app.activeDocument;
             if (!doc) {
                 rootNode.__detectedFontSize = null;
+                rootNode.__detectedFontMetrics = null;
                 updateFontSelectionInfo();
                 return;
             }
@@ -2763,6 +2893,7 @@
             const selectedLayers = Array.from(doc.activeLayers || []);
             if (selectedLayers.length !== 1) {
                 rootNode.__detectedFontSize = null;
+                rootNode.__detectedFontMetrics = null;
                 updateFontSelectionInfo();
                 return;
             }
@@ -2770,13 +2901,17 @@
             const layer = selectedLayers[0];
             if (layer.kind !== photoshop.constants.LayerKind.TEXT) {
                 rootNode.__detectedFontSize = null;
+                rootNode.__detectedFontMetrics = null;
                 updateFontSelectionInfo();
                 return;
             }
 
             let detectedFont = {
                 postScriptName: '',
-                fontSize: null
+                fontSize: null,
+                tracking: null,
+                horizontalScale: null,
+                verticalScale: null
             };
 
             try {
@@ -2798,9 +2933,19 @@
             const characterStyle = textItem.characterStyle;
             detectedFont.postScriptName = characterStyle.font || '';
             detectedFont.fontSize = detectedFont.fontSize || readDomFontSize(textItem);
+            detectedFont.tracking = readDomMetric(characterStyle, 'tracking');
+            detectedFont.horizontalScale = readDomMetric(characterStyle, 'horizontalScale');
+            detectedFont.verticalScale = readDomMetric(characterStyle, 'verticalScale');
 
-            if (!detectedFont.fontSize && !detectedFont.postScriptName) {
+            if (
+                !detectedFont.fontSize
+                && !detectedFont.postScriptName
+                && detectedFont.tracking === null
+                && detectedFont.horizontalScale === null
+                && detectedFont.verticalScale === null
+            ) {
                 rootNode.__detectedFontSize = null;
+                rootNode.__detectedFontMetrics = null;
                 updateFontSelectionInfo();
                 return;
             }
@@ -2823,7 +2968,10 @@
             FontModule.setState({
                 family: matchedFamily,
                 postScriptName: matchedPostScriptName,
-                fontSize: detectedFont.fontSize
+                fontSize: detectedFont.fontSize,
+                tracking: detectedFont.tracking,
+                horizontalScale: detectedFont.horizontalScale,
+                verticalScale: detectedFont.verticalScale
             }, { persist: false });
 
             // 更新 UI
@@ -2838,6 +2986,12 @@
             }
 
             rootNode.__detectedFontSize = detectedFont.fontSize;
+            rootNode.__detectedFontMetrics = {
+                fontSize: detectedFont.fontSize,
+                tracking: detectedFont.tracking,
+                horizontalScale: detectedFont.horizontalScale,
+                verticalScale: detectedFont.verticalScale
+            };
             updateFontSelectionInfo();
 
             console.log('[Panel] 已自动识别图层字号:', detectedFont.fontSize);

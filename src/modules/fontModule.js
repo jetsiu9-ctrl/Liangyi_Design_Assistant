@@ -14,7 +14,10 @@
         postScriptName: '',
         searchKeyword: '',
         realtime: true,
-        fontSize: null
+        fontSize: null,
+        tracking: null,
+        horizontalScale: null,
+        verticalScale: null
     };
 
     let settings = { ...defaultSettings };
@@ -27,7 +30,10 @@
             postScriptName: String(raw.postScriptName || ''),
             searchKeyword: String(raw.searchKeyword || ''),
             realtime: raw.realtime === undefined ? true : Boolean(raw.realtime),
-            fontSize: Number.isFinite(raw.fontSize) ? raw.fontSize : null
+            fontSize: Number.isFinite(raw.fontSize) ? raw.fontSize : null,
+            tracking: Number.isFinite(raw.tracking) ? raw.tracking : null,
+            horizontalScale: Number.isFinite(raw.horizontalScale) ? raw.horizontalScale : null,
+            verticalScale: Number.isFinite(raw.verticalScale) ? raw.verticalScale : null
         };
     }
 
@@ -199,17 +205,55 @@
         return group ? group.styles : [];
     }
 
+    async function applyTrackingWithBatchPlay(action, layer, tracking) {
+        await action.batchPlay([
+            {
+                _obj: 'select',
+                _target: [{ _ref: 'layer', _id: layer.id }],
+                makeVisible: false
+            },
+            {
+                _obj: 'set',
+                _target: [
+                    {
+                        _property: 'textStyle',
+                        _ref: 'property'
+                    },
+                    {
+                    _enum: 'ordinal',
+                    _ref: 'textLayer',
+                    _value: 'targetEnum'
+                    }
+                ],
+                to: {
+                    _obj: 'textStyle',
+                    textOverrideFeatureName: 808465465,
+                    tracking,
+                    typeStyleOperationType: 3
+                }
+            }
+        ], {
+            dialogOptions: 'dontDisplay'
+        });
+    }
+
     async function doExecute(overrideSettings) {
         const previousSettings = settings;
         settings = normalizeSettings(overrideSettings ? { ...settings, ...overrideSettings } : settings);
 
-        if (!settings.postScriptName && !settings.fontSize) {
+        if (
+            !settings.postScriptName
+            && !settings.fontSize
+            && settings.tracking === null
+            && settings.horizontalScale === null
+            && settings.verticalScale === null
+        ) {
             settings = previousSettings;
-            throw new Error('请先选择字体样式或字号');
+            throw new Error('请先选择字体样式、字号、字距或缩放');
         }
 
         const photoshop = require('photoshop');
-        const { app, core } = photoshop;
+        const { app, core, action } = photoshop;
 
         const doc = app.activeDocument;
         if (!doc) {
@@ -221,32 +265,53 @@
             throw new Error('请先选择文字图层');
         }
 
-        return await core.executeAsModal(async () => {
+        return await core.executeAsModal(async (executionContext) => {
+            const historyName = '应用字体参数';
+            const historySuspension = await executionContext.hostControl.suspendHistory({
+                documentID: doc.id,
+                name: historyName
+            });
             let updatedCount = 0;
 
-            for (const layer of selectedLayers) {
-                if (layer.kind !== photoshop.constants.LayerKind.TEXT) {
-                    continue;
+            try {
+                for (const layer of selectedLayers) {
+                    if (layer.kind !== photoshop.constants.LayerKind.TEXT) {
+                        continue;
+                    }
+
+                    try {
+                        if (settings.postScriptName) {
+                            layer.textItem.characterStyle.font = settings.postScriptName;
+                        }
+                        if (settings.fontSize) {
+                            layer.textItem.characterStyle.size = settings.fontSize;
+                        }
+                        if (settings.tracking !== null) {
+                            await applyTrackingWithBatchPlay(action, layer, settings.tracking);
+                        }
+                        if (settings.horizontalScale !== null) {
+                            layer.textItem.characterStyle.horizontalScale = settings.horizontalScale;
+                        }
+                        if (settings.verticalScale !== null) {
+                            layer.textItem.characterStyle.verticalScale = settings.verticalScale;
+                        }
+                        updatedCount++;
+                    } catch (e) {
+                        console.error('[FontModule] 应用字体失败:', layer.name, e);
+                    }
                 }
 
-                try {
-                    if (settings.postScriptName) {
-                        layer.textItem.characterStyle.font = settings.postScriptName;
-                    }
-                    if (settings.fontSize) {
-                        layer.textItem.characterStyle.size = settings.fontSize;
-                    }
-                    updatedCount++;
-                } catch (e) {
-                    console.error('[FontModule] 应用字体失败:', layer.name, e);
+                if (updatedCount === 0) {
+                    throw new Error('选中项中没有可修改的文字图层');
                 }
-            }
 
-            if (updatedCount === 0) {
-                throw new Error('选中项中没有可修改的文字图层');
+                historySuspension.finalName = historyName;
+                await executionContext.hostControl.resumeHistory(historySuspension, true);
+                return { updatedCount };
+            } catch (error) {
+                await executionContext.hostControl.resumeHistory(historySuspension, false);
+                throw error;
             }
-
-            return { updatedCount };
         }, { commandName: '应用字体到文字图层' });
     }
 
@@ -271,19 +336,48 @@
             throw new Error('没有选中任何文本图层');
         }
 
+        const targetLayers = textLayers.filter((layer) => {
+            try {
+                const characterStyle = layer.textItem.characterStyle;
+                const needsOpticalKerning = isOpticalKerning
+                    && characterStyle.autoKerning !== constants.AutoKernType.OPTICAL;
+                const needsSmoothAntialias = isSmoothAntialias
+                    && characterStyle.antiAliasMethod !== constants.AntiAlias.SMOOTH;
+                return needsOpticalKerning || needsSmoothAntialias;
+            } catch (e) {
+                console.error('[FontModule] 检查文本样式状态失败:', layer.name, e);
+                return true;
+            }
+        });
+
+        if (targetLayers.length === 0) {
+            return {
+                updatedCount: 0,
+                skippedCount: textLayers.length,
+                alreadyApplied: true
+            };
+        }
+
         return await core.executeAsModal(async () => {
             let updatedCount = 0;
 
-            for (const layer of textLayers) {
+            for (const layer of targetLayers) {
                 try {
                     const characterStyle = layer.textItem.characterStyle;
-                    if (isOpticalKerning) {
+                    let didUpdate = false;
+
+                    if (isOpticalKerning && characterStyle.autoKerning !== constants.AutoKernType.OPTICAL) {
                         characterStyle.autoKerning = constants.AutoKernType.OPTICAL;
+                        didUpdate = true;
                     }
-                    if (isSmoothAntialias) {
+                    if (isSmoothAntialias && characterStyle.antiAliasMethod !== constants.AntiAlias.SMOOTH) {
                         characterStyle.antiAliasMethod = constants.AntiAlias.SMOOTH;
+                        didUpdate = true;
                     }
-                    updatedCount++;
+
+                    if (didUpdate) {
+                        updatedCount++;
+                    }
                 } catch (e) {
                     console.error('[FontModule] 应用文本样式失败:', layer.name, e);
                 }
@@ -293,7 +387,11 @@
                 throw new Error('选中项中没有可修改的文本图层');
             }
 
-            return { updatedCount };
+            return {
+                updatedCount,
+                skippedCount: textLayers.length - updatedCount,
+                alreadyApplied: updatedCount === 0
+            };
         }, { commandName: '一键优化文本图层属性' });
     }
 

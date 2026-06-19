@@ -40,7 +40,7 @@ function getMainPanelHTML() {
                         <span class="nav-icon-text">📤</span>
                     </div>
                     <div class="nav-icon" data-panel="button" title="生成按钮 (Ctrl+点击创建快捷方式)">
-                        <span class="nav-icon-text">🎨</span>
+                        <span class="nav-icon-text">🪄</span>
                     </div>
                     <div class="nav-icon" data-panel="rename" title="批量重命名 (Ctrl+点击创建快捷方式)">
                         <span class="nav-icon-text">✏️</span>
@@ -56,6 +56,12 @@ function getMainPanelHTML() {
                     </div>
                     <div class="nav-icon" data-panel="guides" title="参考线 (Ctrl+点击创建快捷方式)">
                         <span class="nav-icon-text">📏</span>
+                    </div>
+                    <div class="nav-icon" data-panel="aiGenerate" data-no-quick-action="true" title="图像生成">
+                        <sp-label class="nav-icon-text">🎨</sp-label>
+                    </div>
+                    <div class="nav-icon" data-panel="aiSettings" data-no-quick-action="true" title="连接设置">
+                        <sp-label class="nav-icon-text">⚙️</sp-label>
                     </div>
                 </div>
             </div>
@@ -127,6 +133,24 @@ function getMainPanelHTML() {
                             <div class="feature-info">
                                 <span class="feature-name">参考线</span>
                                 <span class="feature-desc">按间隔生成/清除文档参考线</span>
+                            </div>
+                        </div>
+                        <div class="feature-item" data-goto="aiGenerate">
+                            <div class="feature-icon">
+                                <sp-label class="feature-icon-text">🎨</sp-label>
+                            </div>
+                            <div class="feature-info">
+                                <sp-label class="feature-name">图像生成</sp-label>
+                                <sp-body class="feature-desc" size="S">使用 AI 生成或编辑图像</sp-body>
+                            </div>
+                        </div>
+                        <div class="feature-item" data-goto="aiSettings">
+                            <div class="feature-icon">
+                                <sp-label class="feature-icon-text">⚙️</sp-label>
+                            </div>
+                            <div class="feature-info">
+                                <sp-label class="feature-name">连接设置</sp-label>
+                                <sp-body class="feature-desc" size="S">配置 AI 接口与密钥</sp-body>
                             </div>
                         </div>
                     </div>
@@ -394,9 +418,25 @@ function getMainPanelHTML() {
                         </div>
                     </div>
 
-                    <div class="param-group">
-                        <label class="param-label">字号</label>
-                        <sp-textfield id="fontSizeInput" placeholder="输入字号" type="number"></sp-textfield>
+                    <div class="param-group font-metrics-group">
+                        <div class="font-metrics-row">
+                            <div class="font-metric-field">
+                                <sp-label class="param-label" for="fontSizeInput">字号</sp-label>
+                                <sp-textfield id="fontSizeInput" placeholder="字号" type="number"></sp-textfield>
+                            </div>
+                            <div class="font-metric-field">
+                                <sp-label class="param-label" for="fontTrackingInput">字距</sp-label>
+                                <sp-textfield id="fontTrackingInput" placeholder="0"></sp-textfield>
+                            </div>
+                            <div class="font-metric-field">
+                                <sp-label class="param-label" for="fontHorizontalScaleInput">水平缩放</sp-label>
+                                <sp-textfield id="fontHorizontalScaleInput" placeholder="100"></sp-textfield>
+                            </div>
+                            <div class="font-metric-field">
+                                <sp-label class="param-label" for="fontVerticalScaleInput">垂直缩放</sp-label>
+                                <sp-textfield id="fontVerticalScaleInput" placeholder="100"></sp-textfield>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="param-group">
@@ -551,6 +591,228 @@ function getMainPanelHTML() {
                             <sp-button id="btn-slice-from-guides" variant="primary">从参考线创建切片</sp-button>
                         </div>
                 </div>
+
+                <div id="aiGeneratePanel" class="panel-content ai-assistant-panel">
+                    <section class="ai-assistant-hidden-nav">
+                        <sp-action-button id="connectionModuleButton" quiet title="连接设置">
+                            <sp-label>⚙️</sp-label>
+                        </sp-action-button>
+                        <sp-action-button id="generateModuleButton" quiet title="生成">
+                            <sp-label>🎨</sp-label>
+                        </sp-action-button>
+                    </section>
+
+                    <section id="generateModule" class="ai-module-panel">
+                        <sp-heading size="S">图像生成</sp-heading>
+
+                        <section id="resultPreviewSection" class="result-preview-section is-hidden">
+                            <sp-heading size="S">结果预览</sp-heading>
+                            <section id="resultPreviewShell" class="result-preview-shell">
+                                <img id="previewImage" class="result-preview-image" alt="" />
+                                <section class="result-count-badge">
+                                    <sp-body id="resultPageText" size="S">1/1</sp-body>
+                                </section>
+                                <section id="resultControls" class="result-controls">
+                                    <section id="resultPager" class="result-pager is-hidden">
+                                        <sp-action-button id="prevResultButton" class="result-nav-button" quiet disabled title="上一张">
+                                            <sp-label>◀️</sp-label>
+                                        </sp-action-button>
+                                        <sp-action-button id="nextResultButton" class="result-nav-button" quiet disabled title="下一张">
+                                            <sp-label>▶️</sp-label>
+                                        </sp-action-button>
+                                    </section>
+                                    <section class="result-export-row">
+                                        <sp-button id="exportCurrentButton" variant="primary" disabled>
+                                            <sp-label>导出当前</sp-label>
+                                        </sp-button>
+                                        <sp-button id="exportAllButton" variant="primary" disabled>
+                                            <sp-label>导出全部</sp-label>
+                                        </sp-button>
+                                    </section>
+                                </section>
+                            </section>
+                            <section class="result-manage-row">
+                                <sp-button id="deleteCurrentResultButton" variant="secondary" disabled>
+                                    <sp-label>删除当前</sp-label>
+                                </sp-button>
+                                <sp-button id="clearResultsButton" variant="secondary" disabled>
+                                    <sp-label>清空</sp-label>
+                                </sp-button>
+                            </section>
+                        </section>
+
+                        <section id="referenceSection" class="reference-section is-hidden">
+                            <section class="reference-header">
+                                <sp-label>参考图</sp-label>
+                                <sp-body id="referenceCountText" size="S">0/8</sp-body>
+                            </section>
+                            <section id="referenceList" class="reference-list"></section>
+                            <section class="button-row">
+                                <sp-button id="clearReferencesButton" variant="secondary">
+                                    <sp-label>清空</sp-label>
+                                </sp-button>
+                            </section>
+                        </section>
+
+                        <section class="field-row">
+                            <section class="field">
+                                <sp-label for="customModelInput">自定义模型</sp-label>
+                                <sp-textfield id="customModelInput"></sp-textfield>
+                            </section>
+                        </section>
+
+                        <sp-label for="promptInput">提示词</sp-label>
+                        <sp-textarea id="promptInput" rows="6"></sp-textarea>
+
+                        <section class="field-row">
+                            <section class="field">
+                                <sp-label for="modePicker">模式</sp-label>
+                                <sp-picker id="modePicker">
+                                    <sp-menu slot="options">
+                                        <sp-menu-item value="text2img" selected>文生图</sp-menu-item>
+                                        <sp-menu-item value="img2img">图像编辑</sp-menu-item>
+                                    </sp-menu>
+                                </sp-picker>
+                            </section>
+
+                            <section class="field">
+                                <sp-label for="modelPicker">模型</sp-label>
+                                <sp-picker id="modelPicker">
+                                    <sp-menu slot="options">
+                                        <sp-menu-item value="gpt-image-2" selected>gpt-image-2</sp-menu-item>
+                                        <sp-menu-item value="gpt-image-2-all">gpt-image-2-all</sp-menu-item>
+                                        <sp-menu-item value="gpt-image-2-2K">gpt-image-2-2K</sp-menu-item>
+                                        <sp-menu-item value="gpt-image-2-4K">gpt-image-2-4K</sp-menu-item>
+                                        <sp-menu-item value="gemini-3-pro-image-preview">gemini-3-pro-image-preview</sp-menu-item>
+                                        <sp-menu-item value="gemini-3.1-flash-image-preview">gemini-3.1-flash-image-preview</sp-menu-item>
+                                    </sp-menu>
+                                </sp-picker>
+                            </section>
+                        </section>
+
+                        <section class="field-row">
+                            <section class="field">
+                                <sp-label for="aspectRatioPicker">画面比例</sp-label>
+                                <sp-picker id="aspectRatioPicker">
+                                    <sp-menu slot="options">
+                                        <sp-menu-item value="auto" selected>自动</sp-menu-item>
+                                        <sp-menu-item value="1:1">1:1</sp-menu-item>
+                                        <sp-menu-item value="3:2">3:2</sp-menu-item>
+                                        <sp-menu-item value="2:3">2:3</sp-menu-item>
+                                        <sp-menu-item value="4:3">4:3</sp-menu-item>
+                                        <sp-menu-item value="3:4">3:4</sp-menu-item>
+                                        <sp-menu-item value="5:4">5:4</sp-menu-item>
+                                        <sp-menu-item value="4:5">4:5</sp-menu-item>
+                                        <sp-menu-item value="16:9">16:9</sp-menu-item>
+                                        <sp-menu-item value="9:16">9:16</sp-menu-item>
+                                        <sp-menu-item value="2:1">2:1</sp-menu-item>
+                                        <sp-menu-item value="1:2">1:2</sp-menu-item>
+                                        <sp-menu-item value="21:9">21:9</sp-menu-item>
+                                        <sp-menu-item value="9:21">9:21</sp-menu-item>
+                                    </sp-menu>
+                                </sp-picker>
+                            </section>
+
+                            <section class="field">
+                                <sp-label for="resolutionPicker">分辨率</sp-label>
+                                <sp-picker id="resolutionPicker">
+                                    <sp-menu slot="options">
+                                        <sp-menu-item value="1k" selected>1k</sp-menu-item>
+                                        <sp-menu-item value="2k">2k</sp-menu-item>
+                                        <sp-menu-item value="4k">4k</sp-menu-item>
+                                    </sp-menu>
+                                </sp-picker>
+                            </section>
+                        </section>
+
+                        <section class="field-row">
+                            <section class="field">
+                                <sp-label for="qualityPicker">质量</sp-label>
+                                <sp-picker id="qualityPicker">
+                                    <sp-menu slot="options">
+                                        <sp-menu-item value="auto" selected>自动</sp-menu-item>
+                                        <sp-menu-item value="high">高</sp-menu-item>
+                                        <sp-menu-item value="medium">中</sp-menu-item>
+                                        <sp-menu-item value="low">低</sp-menu-item>
+                                    </sp-menu>
+                                </sp-picker>
+                            </section>
+
+                            <section class="field">
+                                <sp-label for="countInput">数量</sp-label>
+                                <sp-textfield id="countInput" value="1"></sp-textfield>
+                            </section>
+                        </section>
+
+                        <section class="check-row">
+                            <sp-checkbox id="asyncCheckbox" checked></sp-checkbox>
+                            <sp-label for="asyncCheckbox">异步任务</sp-label>
+                        </section>
+
+                        <section class="button-row generate-action-row">
+                            <sp-button id="generateButton" variant="accent">
+                                <sp-label>开始生成</sp-label>
+                            </sp-button>
+                        </section>
+
+                        <section class="status-block">
+                            <sp-heading size="S">状态</sp-heading>
+                            <sp-body id="statusText" size="S">就绪。</sp-body>
+                        </section>
+                    </section>
+                </div>
+
+                <div id="aiSettingsPanel" class="panel-content ai-assistant-panel">
+                    <section id="connectionModule" class="ai-module-panel">
+                        <sp-heading size="S">连接设置</sp-heading>
+
+                        <sp-label for="interfacePicker">当前接口</sp-label>
+                        <section id="interfacePickerRow" class="interface-picker-row">
+                            <sp-picker id="interfacePicker">
+                                <sp-menu id="interfacePickerMenu" slot="options"></sp-menu>
+                            </sp-picker>
+                            <sp-action-button id="addInterfaceButton" class="interface-add-button" quiet title="添加接口">
+                                <sp-label>+</sp-label>
+                            </sp-action-button>
+                        </section>
+                        <sp-body class="info-text interface-help-text" size="S">点击"+"添加接口，右键下拉框可编辑</sp-body>
+
+                        <section id="interfaceActionMenu" class="interface-action-menu is-hidden">
+                            <sp-button id="editInterfaceButton" variant="secondary">
+                                <sp-label>编辑</sp-label>
+                            </sp-button>
+                            <sp-button id="deleteInterfaceButton" variant="secondary">
+                                <sp-label>删除</sp-label>
+                            </sp-button>
+                            <sp-button id="cancelInterfaceActionButton" variant="secondary">
+                                <sp-label>取消</sp-label>
+                            </sp-button>
+                        </section>
+
+                        <section id="interfaceForm" class="interface-form is-hidden">
+                            <sp-label for="interfaceNameInput">名称</sp-label>
+                            <sp-textfield id="interfaceNameInput"></sp-textfield>
+
+                            <sp-label for="interfaceBaseUrlInput">接口地址</sp-label>
+                            <sp-textfield id="interfaceBaseUrlInput" value="https://ai.t8star.org"></sp-textfield>
+
+                            <sp-label for="interfaceApiKeyInput">API 密钥</sp-label>
+                            <sp-textfield id="interfaceApiKeyInput" type="password"></sp-textfield>
+
+                            <section class="button-row">
+                                <sp-button id="saveInterfaceButton" variant="secondary">
+                                    <sp-label>保存</sp-label>
+                                </sp-button>
+                                <sp-button id="cancelInterfaceButton" variant="secondary">
+                                    <sp-label>取消</sp-label>
+                                </sp-button>
+                            </section>
+                        </section>
+
+                        <sp-textfield id="baseUrlInput" class="is-hidden" value="https://ai.t8star.org"></sp-textfield>
+                        <sp-textfield id="apiKeyInput" class="is-hidden" type="password"></sp-textfield>
+                    </section>
+                </div>
             </div>
         </div>
     `;
@@ -627,6 +889,7 @@ entrypoints.setup({
                 console.log('[HaimatiPanel] 创建面板');
                 loadCSS('src/styles/main.css');
                 loadCSS('src/styles/quick.css');
+                loadCSS('src/styles/aiAssistant.css');
                 rootNode.innerHTML = getMainPanelHTML();
                 return Promise.all([
                     loadScript('src/modules/quickStorage.js'),
@@ -639,11 +902,16 @@ entrypoints.setup({
                     loadScript('src/modules/fontModule.js'),
                     loadScript('src/modules/translateModule.js'),
                     loadScript('src/modules/guidesModule.js'),
+                    loadScript('src/modules/aiAssistantModule.js'),
                     loadScript('src/modules/panel.js')
-                ]).then(() => {
+                ]).then(async () => {
                     if (typeof window.initPanel === 'function') {
                         window.initPanel(rootNode);
                         console.log('[HaimatiPanel] 初始化完成');
+                    }
+                    if (typeof window.initAIAssistant === 'function') {
+                        await window.initAIAssistant(rootNode);
+                        console.log('[HaimatiPanel] AI 助手模块初始化完成');
                     }
                 });
             },

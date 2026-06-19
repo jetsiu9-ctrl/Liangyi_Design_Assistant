@@ -1,0 +1,661 @@
+.ai-assistant-panel {
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ai-assistant-hidden-nav,
+.ai-assistant-panel .is-hidden {
+    display: none !important;
+}
+
+.ai-assistant-panel .ai-module-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+    width: 100%;
+}
+
+.ai-assistant-panel .ai-module-panel > sp-heading,
+.ai-assistant-panel .result-preview-section > sp-heading,
+.ai-assistant-panel .status-block > sp-heading {
+    margin: 0 0 4px;
+    padding: 0 0 8px;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.ai-assistant-panel .field-row,
+.ai-assistant-panel .button-row,
+.ai-assistant-panel .result-export-row,
+.ai-assistant-panel .result-manage-row,
+.ai-assistant-panel .reference-header,
+.ai-assistant-panel .interface-picker-row,
+.ai-assistant-panel .interface-action-menu {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    width: 100%;
+}
+
+.ai-assistant-panel .field {
+    display: flex;
+    flex: 1 1 140px;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 120px;
+}
+
+.ai-assistant-panel .check-row,
+.ai-assistant-panel .result-preview-section,
+.ai-assistant-panel .reference-section,
+.ai-assistant-panel .status-block,
+.ai-assistant-panel .interface-action-menu,
+.ai-assistant-panel .interface-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+}
+
+.ai-assistant-panel .check-row {
+    flex-direction: row;
+    align-items: center;
+    column-gap: 13px;
+    margin-top: 14px;
+    margin-bottom: 2px;
+}
+
+.ai-assistant-panel .check-row sp-checkbox {
+    flex: 0 0 auto;
+}
+
+.ai-assistant-panel .check-row sp-label {
+    display: flex;
+    align-items: center;
+    min-height: 22px;
+    line-height: 1;
+}
+
+.ai-assistant-panel .check-row + .generate-action-row {
+    margin-top: 12px;
+}
+
+.ai-assistant-panel .generate-action-row {
+    margin-bottom: 10px;
+}
+
+.ai-assistant-panel .generate-action-row + .status-block {
+    margin-top: 8px;
+}
+
+.ai-assistant-panel .interface-picker-row {
+    flex-wrap: nowrap;
+}
+
+.ai-assistant-panel .interface-picker-row sp-picker {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.ai-assistant-panel .interface-add-button {
+    display: flex;
+    flex: 0 0 34px;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    min-height: 34px;
+    padding: 0;
+}
+
+.ai-assistant-panel .interface-form {
+    align-items: stretch;
+}
+
+.ai-assistant-panel .interface-help-text {
+    color: var(--text-muted);
+}
+
+.ai-assistant-panel .result-preview-shell {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 260px;
+    min-height: 260px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.18);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+}
+
+.ai-assistant-panel .result-preview-image {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.ai-assistant-panel .result-controls {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 8px;
+    background: transparent;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.ai-assistant-panel .result-preview-shell:hover .result-controls,
+.ai-assistant-panel .result-preview-shell:focus-within .result-controls {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.ai-assistant-panel .result-count-badge {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 34px;
+    padding: 2px 7px;
+    background: rgba(0, 0, 0, 0.52);
+    border-radius: 4px;
+}
+
+.ai-assistant-panel .result-pager {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    width: 64%;
+    min-width: 150px;
+    max-width: 260px;
+    height: 100%;
+    transform: translateX(-50%);
+    pointer-events: none;
+}
+
+.ai-assistant-panel .result-nav-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    min-width: 34px;
+    height: 44px;
+    min-height: 44px;
+    padding: 0;
+    pointer-events: auto;
+}
+
+.ai-assistant-panel #prevResultButton,
+.ai-assistant-panel #nextResultButton {
+    transform: translateY(100px);
+}
+
+.ai-assistant-panel #nextResultButton {
+    transform: translate(115px, 100px);
+}
+
+.ai-assistant-panel .reference-list {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0;
+    min-height: 0;
+    max-height: 292px;
+    padding: 4px;
+    overflow: auto;
+    background: rgba(0, 0, 0, 0.18);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+}
+
+.ai-assistant-panel .reference-cell {
+    display: flex;
+    flex: 1 1 50%;
+    flex-direction: column;
+    min-width: 120px;
+    height: 90px;
+    padding: 3px;
+}
+
+.ai-assistant-panel .reference-cell-inner,
+.ai-assistant-panel .reference-add-tile {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    width: 100%;
+    height: 100%;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+}
+
+.ai-assistant-panel .reference-thumb {
+    width: auto;
+    max-width: 100%;
+    height: auto;
+    max-height: 58px;
+    object-fit: contain;
+    border-radius: 4px;
+}
+
+.ai-assistant-panel .reference-remove {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    min-width: 24px;
+    height: 24px;
+    min-height: 24px;
+    padding: 0;
+}
+
+.ai-assistant-panel .reference-add-cell {
+    cursor: pointer;
+}
+
+.ai-assistant-panel .reference-add-icon {
+    font-size: 20px;
+    font-weight: 700;
+}
+
+.ai-assistant-panel sp-textarea,
+.ai-assistant-panel sp-textfield,
+.ai-assistant-panel sp-picker {
+    width: 100%;
+}
+
+.ai-assistant-panel sp-label {
+    color: var(--text-muted);
+    font-family: var(--font-ui);
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.ai-assistant-panel sp-body {
+    color: var(--text-muted);
+    font-family: var(--font-ui);
+}
+
+.ai-assistant-panel .info-text {
+    margin: 0;
+    color: var(--text-muted);
+    font-family: var(--font-ui);
+    font-size: 11px;
+    line-height: 1.45;
+}
+
+.ai-assistant-panel .button-row sp-button {
+    min-width: 96px;
+}
+
+.ai-assistant-panel #generateButton,
+.ai-assistant-panel #exportCurrentButton,
+.ai-assistant-panel #exportAllButton,
+.ai-assistant-panel #editInterfaceButton,
+.ai-assistant-panel #deleteInterfaceButton,
+.ai-assistant-panel #cancelInterfaceActionButton,
+.ai-assistant-panel #saveInterfaceButton,
+.ai-assistant-panel #cancelInterfaceButton,
+.ai-assistant-panel #clearReferencesButton,
+.ai-assistant-panel #deleteCurrentResultButton,
+.ai-assistant-panel #clearResultsButton {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease, opacity 0.16s ease;
+}
+
+.ai-assistant-panel #generateButton::part(button),
+.ai-assistant-panel #exportCurrentButton::part(button),
+.ai-assistant-panel #exportAllButton::part(button),
+.ai-assistant-panel #editInterfaceButton::part(button),
+.ai-assistant-panel #deleteInterfaceButton::part(button),
+.ai-assistant-panel #cancelInterfaceActionButton::part(button),
+.ai-assistant-panel #saveInterfaceButton::part(button),
+.ai-assistant-panel #cancelInterfaceButton::part(button),
+.ai-assistant-panel #clearReferencesButton::part(button),
+.ai-assistant-panel #deleteCurrentResultButton::part(button),
+.ai-assistant-panel #clearResultsButton::part(button) {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease, opacity 0.16s ease;
+}
+
+.ai-assistant-panel #generateButton sp-label,
+.ai-assistant-panel #exportCurrentButton sp-label,
+.ai-assistant-panel #exportAllButton sp-label,
+.ai-assistant-panel #editInterfaceButton sp-label,
+.ai-assistant-panel #deleteInterfaceButton sp-label,
+.ai-assistant-panel #cancelInterfaceActionButton sp-label,
+.ai-assistant-panel #saveInterfaceButton sp-label,
+.ai-assistant-panel #cancelInterfaceButton sp-label,
+.ai-assistant-panel #clearReferencesButton sp-label,
+.ai-assistant-panel #deleteCurrentResultButton sp-label,
+.ai-assistant-panel #clearResultsButton sp-label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    color: #fff;
+    text-align: center;
+}
+
+.ai-assistant-panel #generateButton:not([disabled]),
+.ai-assistant-panel #exportCurrentButton:not([disabled]),
+.ai-assistant-panel #exportAllButton:not([disabled]),
+.ai-assistant-panel #editInterfaceButton:not([disabled]),
+.ai-assistant-panel #deleteInterfaceButton:not([disabled]),
+.ai-assistant-panel #cancelInterfaceActionButton:not([disabled]),
+.ai-assistant-panel #saveInterfaceButton:not([disabled]),
+.ai-assistant-panel #cancelInterfaceButton:not([disabled]),
+.ai-assistant-panel #clearReferencesButton:not([disabled]),
+.ai-assistant-panel #deleteCurrentResultButton:not([disabled]),
+.ai-assistant-panel #clearResultsButton:not([disabled]) {
+    cursor: pointer;
+}
+
+.ai-assistant-panel #generateButton:not([disabled])::part(button),
+.ai-assistant-panel #exportCurrentButton:not([disabled])::part(button),
+.ai-assistant-panel #exportAllButton:not([disabled])::part(button),
+.ai-assistant-panel #editInterfaceButton:not([disabled])::part(button),
+.ai-assistant-panel #deleteInterfaceButton:not([disabled])::part(button),
+.ai-assistant-panel #cancelInterfaceActionButton:not([disabled])::part(button),
+.ai-assistant-panel #saveInterfaceButton:not([disabled])::part(button),
+.ai-assistant-panel #cancelInterfaceButton:not([disabled])::part(button),
+.ai-assistant-panel #clearReferencesButton:not([disabled])::part(button),
+.ai-assistant-panel #deleteCurrentResultButton:not([disabled])::part(button),
+.ai-assistant-panel #clearResultsButton:not([disabled])::part(button) {
+    cursor: pointer;
+}
+
+.ai-assistant-panel #editInterfaceButton,
+.ai-assistant-panel #deleteInterfaceButton,
+.ai-assistant-panel #cancelInterfaceActionButton,
+.ai-assistant-panel #saveInterfaceButton,
+.ai-assistant-panel #cancelInterfaceButton,
+.ai-assistant-panel #clearReferencesButton,
+.ai-assistant-panel #deleteCurrentResultButton,
+.ai-assistant-panel #clearResultsButton {
+    min-height: 30px;
+    padding: 6px 12px;
+    color: #fff !important;
+    background: var(--surface-strong) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius);
+    font-family: var(--font-ui);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    user-select: none;
+}
+
+.ai-assistant-panel #editInterfaceButton::part(button),
+.ai-assistant-panel #deleteInterfaceButton::part(button),
+.ai-assistant-panel #cancelInterfaceActionButton::part(button),
+.ai-assistant-panel #saveInterfaceButton::part(button),
+.ai-assistant-panel #cancelInterfaceButton::part(button),
+.ai-assistant-panel #clearReferencesButton::part(button),
+.ai-assistant-panel #deleteCurrentResultButton::part(button),
+.ai-assistant-panel #clearResultsButton::part(button) {
+    min-height: 30px;
+    padding: 6px 12px;
+    color: #fff !important;
+    background: var(--surface-strong) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius);
+}
+
+.ai-assistant-panel #exportCurrentButton,
+.ai-assistant-panel #exportAllButton {
+    background: var(--accent) !important;
+    border-color: var(--accent) !important;
+}
+
+.ai-assistant-panel #exportCurrentButton::part(button),
+.ai-assistant-panel #exportAllButton::part(button) {
+    background: var(--accent) !important;
+    border-color: var(--accent) !important;
+}
+
+.ai-assistant-panel #editInterfaceButton:hover:not([disabled]),
+.ai-assistant-panel #deleteInterfaceButton:hover:not([disabled]),
+.ai-assistant-panel #cancelInterfaceActionButton:hover:not([disabled]),
+.ai-assistant-panel #saveInterfaceButton:hover:not([disabled]),
+.ai-assistant-panel #cancelInterfaceButton:hover:not([disabled]) {
+    color: #fff !important;
+    background: var(--accent) !important;
+    border-color: var(--accent) !important;
+}
+
+.ai-assistant-panel #editInterfaceButton:hover:not([disabled])::part(button),
+.ai-assistant-panel #deleteInterfaceButton:hover:not([disabled])::part(button),
+.ai-assistant-panel #cancelInterfaceActionButton:hover:not([disabled])::part(button),
+.ai-assistant-panel #saveInterfaceButton:hover:not([disabled])::part(button),
+.ai-assistant-panel #cancelInterfaceButton:hover:not([disabled])::part(button) {
+    color: #fff !important;
+    background: var(--accent) !important;
+    border-color: var(--accent) !important;
+}
+
+.ai-assistant-panel #editInterfaceButton:active:not([disabled]),
+.ai-assistant-panel #deleteInterfaceButton:active:not([disabled]),
+.ai-assistant-panel #cancelInterfaceActionButton:active:not([disabled]),
+.ai-assistant-panel #saveInterfaceButton:active:not([disabled]),
+.ai-assistant-panel #cancelInterfaceButton:active:not([disabled]) {
+    background: rgba(61, 125, 231, 0.74) !important;
+    border-color: var(--accent) !important;
+}
+
+.ai-assistant-panel #editInterfaceButton:active:not([disabled])::part(button),
+.ai-assistant-panel #deleteInterfaceButton:active:not([disabled])::part(button),
+.ai-assistant-panel #cancelInterfaceActionButton:active:not([disabled])::part(button),
+.ai-assistant-panel #saveInterfaceButton:active:not([disabled])::part(button),
+.ai-assistant-panel #cancelInterfaceButton:active:not([disabled])::part(button) {
+    background: rgba(61, 125, 231, 0.74) !important;
+    border-color: var(--accent) !important;
+}
+
+.ai-assistant-panel #deleteCurrentResultButton:hover:not([disabled]) {
+    background: var(--surface-hover) !important;
+    border-color: rgba(61, 125, 231, 0.42) !important;
+}
+
+.ai-assistant-panel #clearReferencesButton:hover:not([disabled]),
+.ai-assistant-panel #clearReferencesButton:focus:not([disabled]),
+.ai-assistant-panel #clearResultsButton:hover:not([disabled]),
+.ai-assistant-panel #clearResultsButton:focus:not([disabled]) {
+    color: #fff !important;
+    background: var(--danger) !important;
+    border-color: var(--danger) !important;
+    opacity: 0.96;
+}
+
+.ai-assistant-panel #clearReferencesButton:active:not([disabled]),
+.ai-assistant-panel #clearResultsButton:active:not([disabled]) {
+    color: #fff !important;
+    background: var(--danger) !important;
+    border-color: var(--danger) !important;
+    opacity: 0.82;
+}
+
+.ai-assistant-panel #generateButton[disabled],
+.ai-assistant-panel #exportCurrentButton[disabled],
+.ai-assistant-panel #exportAllButton[disabled],
+.ai-assistant-panel #clearReferencesButton[disabled],
+.ai-assistant-panel #clearResultsButton[disabled] {
+    cursor: default;
+}
+
+.ai-assistant-panel .interface-add-button {
+    color: #fff;
+    background: var(--surface-strong);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+
+.ai-assistant-panel .interface-add-button sp-label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    color: #fff;
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.ai-assistant-panel .interface-add-button::part(button) {
+    background: var(--surface-strong);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+
+.ai-assistant-panel .result-nav-button {
+    color: #fff;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    outline: none;
+    box-shadow: none;
+    appearance: none;
+    --mod-actionbutton-background-color-default: transparent;
+    --mod-actionbutton-background-color-hover: transparent;
+    --mod-actionbutton-background-color-down: transparent;
+    --mod-actionbutton-background-color-focus: transparent;
+    --mod-actionbutton-background-color-key-focus: transparent;
+    --mod-actionbutton-border-color-default: transparent;
+    --mod-actionbutton-border-color-hover: transparent;
+    --mod-actionbutton-border-color-down: transparent;
+    --mod-actionbutton-border-color-focus: transparent;
+    --mod-actionbutton-border-color-key-focus: transparent;
+    --spectrum-actionbutton-background-color-default: transparent;
+    --spectrum-actionbutton-background-color-hover: transparent;
+    --spectrum-actionbutton-background-color-down: transparent;
+    --spectrum-actionbutton-border-color-default: transparent;
+    --spectrum-actionbutton-border-color-hover: transparent;
+    --spectrum-actionbutton-border-color-down: transparent;
+}
+
+.ai-assistant-panel .result-nav-button:hover,
+.ai-assistant-panel .result-nav-button:active,
+.ai-assistant-panel .result-nav-button:focus,
+.ai-assistant-panel .result-nav-button:focus-visible,
+.ai-assistant-panel .result-nav-button[quiet],
+.ai-assistant-panel .result-nav-button[quiet]:hover,
+.ai-assistant-panel .result-nav-button[quiet]:active,
+.ai-assistant-panel .result-nav-button[quiet]:focus,
+.ai-assistant-panel .result-nav-button[quiet]:focus-visible {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    outline: none;
+    box-shadow: none;
+}
+
+.ai-assistant-panel .result-nav-button::part(button) {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    outline: none;
+    box-shadow: none;
+}
+
+.ai-assistant-panel .result-nav-button sp-label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    color: #fff;
+    font-size: 18px;
+    line-height: 1;
+}
+
+.ai-assistant-panel .reference-add-tile {
+    min-width: 0;
+    color: var(--text-muted);
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px dashed rgba(255, 255, 255, 0.22);
+}
+
+.ai-assistant-panel .reference-add-tile:hover {
+    background: rgba(61, 125, 231, 0.10);
+    border-color: rgba(106, 159, 217, 0.85);
+}
+
+.ai-assistant-panel .reference-add-icon,
+.ai-assistant-panel .reference-add-text {
+    color: rgba(255, 255, 255, 0.55);
+}
+
+.ai-assistant-panel .reference-add-text {
+    font-size: 10px;
+}
+
+.ai-assistant-panel .reference-remove {
+    color: #e03448;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    cursor: pointer;
+    font-family: var(--font-ui);
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1;
+    --mod-actionbutton-background-color-default: transparent;
+    --mod-actionbutton-background-color-hover: transparent;
+    --mod-actionbutton-background-color-down: transparent;
+    --mod-actionbutton-border-color-default: transparent;
+    --mod-actionbutton-border-color-hover: transparent;
+    --mod-actionbutton-border-color-down: transparent;
+}
+
+.ai-assistant-panel .reference-remove::part(button) {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    min-width: 24px;
+    height: 24px;
+    min-height: 24px;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    outline: none;
+    box-shadow: none;
+}
+
+.ai-assistant-panel .reference-remove:hover {
+    color: #c02038;
+    background: transparent;
+}

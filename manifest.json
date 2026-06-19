@@ -13,9 +13,9 @@
             "type": "panel",
             "id": "HaimatiPanel",
             "label": "设计助理",
-            "minimumSize": { "width": 300, "height": 800 },
-            "maximumSize": { "width": 600, "height": 99999 },
-            "preferredDockedSize": { "width": 360, "height": 800 }
+            "minimumSize": { "width": 400, "height": 800 },
+            "maximumSize": { "width": 402, "height": 802 },
+            "preferredDockedSize": { "width": 400, "height": 800 }
         },
         {
             "type": "panel",
@@ -40,9 +40,7 @@
             "enablePluginCommunication": true
         },
         "network": {
-            "domains": [
-                "https://fanyi-api.baidu.com"
-            ]
+            "domains": "all"
         }
     },
     "permissions": [

@@ -99,6 +99,24 @@ body {
     user-select: none;
 }
 
+.nav-icon sp-label.nav-icon-text {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    color: currentColor;
+    font-family: var(--font-ui);
+    font-size: 18px;
+    font-weight: 400;
+    line-height: 1;
+    text-align: center;
+    pointer-events: none;
+    user-select: none;
+}
+
 .nav-icon-text.font-icon {
     font-size: 14px;
     font-weight: 700;
@@ -113,6 +131,24 @@ body {
 .feature-icon-text {
     font-size: 18px;
     line-height: 1;
+    user-select: none;
+}
+
+.feature-icon sp-label.feature-icon-text {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    color: currentColor;
+    font-family: var(--font-ui);
+    font-size: 18px;
+    font-weight: 400;
+    line-height: 1;
+    text-align: center;
+    pointer-events: none;
     user-select: none;
 }
 
@@ -354,10 +390,21 @@ sp-textfield,
     word-break: break-all;
 }
 
+.font-selection-metrics {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    align-items: center;
+}
+
 .current-font-size-label {
-    font-size: 16px;
+    flex: 1 1 130px;
+    min-width: 0;
+    font-size: 13px;
     font-weight: 700;
     line-height: 1.35;
+    word-break: keep-all;
 }
 
 .quick-btn,
@@ -838,7 +885,7 @@ sp-textfield,
 }
 
 .toast {
-    position: fixed;
+    position: absolute;
     left: 50%;
     bottom: 14px;
     z-index: 1000;
@@ -1101,6 +1148,35 @@ sp-textfield {
 }
 
 /* 字号输入框样式 - 已迁移到 sp-textfield */
+.font-metrics-group {
+    margin-bottom: 8px;
+}
+
+.font-metrics-row {
+    display: flex;
+    flex-direction: row;
+    gap: 6px;
+    align-items: flex-start;
+    width: 100%;
+}
+
+.font-metric-field {
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.font-metric-field sp-textfield {
+    width: 100%;
+    min-width: 0;
+}
+
+.font-metric-field .param-label {
+    margin-bottom: 0;
+    white-space: nowrap;
+}
 
 /* 文本对齐按钮 */
 .align-buttons {
@@ -1113,17 +1189,68 @@ sp-textfield {
 
 .layer-transform-buttons {
     flex-direction: column;
-    gap: 6px;
+    gap: 12px;
+    padding: 12px 14px;
 }
 
 .layer-transform-row {
     display: flex;
-    gap: 6px;
+    gap: 14px;
     width: 100%;
+    justify-content: center;
 }
 
 .layer-transform-buttons .align-btn {
-    min-height: 30px;
+    flex: 0 0 128px;
+    max-width: 128px;
+    min-height: 26px;
+    padding: 6px 12px;
+    color: #fff;
+    background: var(--surface-strong) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius);
+    font-family: var(--font-ui);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    text-align: center;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease, opacity 0.16s ease;
+}
+
+.layer-transform-buttons sp-button.align-btn::part(button) {
+    min-height: 26px;
+    padding: 6px 12px;
+    color: #fff;
+    background: var(--surface-strong) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius);
+}
+
+.layer-transform-buttons sp-button.align-btn sp-label {
+    color: #fff;
+    font-family: var(--font-ui);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+}
+
+.layer-transform-buttons .align-btn:hover {
+    color: #fff !important;
+    background: var(--accent) !important;
+    border-color: var(--accent) !important;
+}
+
+.layer-transform-buttons sp-button.align-btn:hover::part(button) {
+    color: #fff !important;
+    background: var(--accent) !important;
+    border-color: var(--accent) !important;
+}
+
+.layer-transform-buttons .align-btn:active,
+.layer-transform-buttons sp-button.align-btn:active::part(button) {
+    background: rgba(61, 125, 231, 0.74) !important;
 }
 
 .align-btn {
