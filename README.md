@@ -1,176 +1,245 @@
-readme_bilingual_content = """# 凉意设计助理 (Liangyi Design Assistant) - Photoshop UXP Plugin
+# Liangyi Design Assistant / 凉意设计助手
 
-[简体中文](#简体中文) | [English](#english)
+凉意设计助手是一个面向 Adobe Photoshop 的 UXP 插件，集合了设计交付中常用的图层导出、按钮生成、批量重命名、文档优化、字体管理、翻译、参考线、颜色面板与 AI 图像生成等工具。
 
----
+Liangyi Design Assistant is an Adobe Photoshop UXP plugin that brings together common production tools for layer export, button generation, batch renaming, document cleanup, font management, translation, guide creation, color handling, and AI image generation.
 
-## 简体中文
+## 功能概览 / Features
 
-`凉意设计助理` 是一款专为 Adobe Photoshop（v25.0 及以上版本）打造的高级 **UXP (Unified Extensibility Platform)** 插件。它旨在极大地提升视觉设计师和修图师的工作效率，集成了文档优化、资产导出、文本管理、多语翻译以及前沿的 AI 图像生成等全方位功能。
+| 中文 | English |
+| --- | --- |
+| 快捷导出：支持 PNG/JPEG、PNG 位深、JPEG 质量、源文件路径和批量导出。 | Quick Export: supports PNG/JPEG, PNG bit depth, JPEG quality, source-folder export, and batch export. |
+| 生成按钮：基于选中文字图层生成带颜色、尺寸偏移和圆角参数的按钮图层。 | Button Generator: creates button layers from selected text layers with color, offset, and corner-radius settings. |
+| 批量重命名：按基础名称、序号位置和起始序号重命名选中图层。 | Batch Rename: renames selected layers with a base name, sequence position, and starting index. |
+| 文档优化：扫描并处理智能对象、空白图层、隐藏图层等常见清理项。 | Document Optimization: scans and handles smart objects, empty layers, hidden layers, and other cleanup targets. |
+| 字体管理：读取 Photoshop 可用字体，按字体家族和样式快速应用到文字图层。 | Font Management: reads available Photoshop fonts and applies family/style settings to selected text layers. |
+| 百度翻译：配置百度翻译 APP ID 与 API KEY 后，翻译并替换或附加选中文字图层。 | Baidu Translate: translates selected text layers after configuring Baidu Translate APP ID and API KEY. |
+| 参考线：按间隔生成纵向/横向参考线，清除参考线，并可基于参考线创建切片。 | Guides: creates vertical/horizontal guides by interval, clears guides, and can create slices from guides. |
+| 快捷操作面板：在主面板中通过 Ctrl+点击功能图标创建常用操作快捷方式。 | Quick Access Panel: create reusable shortcuts from the main panel by Ctrl-clicking feature icons. |
+| 颜色面板：管理前景色、手动颜色、图层填充/描边颜色以及颜色交换。 | Color Panel: manages foreground colors, manual swatches, layer fill/stroke colors, and color swapping. |
+| AI 图像生成：配置接口后提交图像生成请求、预览结果、导出或置入 Photoshop 文档。 | AI Image Generation: submits generation requests after API configuration, previews results, exports them, or places them into Photoshop documents. |
 
-本插件采用模块化的清晰架构，包含三个独立且可协同工作的专用面板：主助理面板、快捷面板与颜色面板。
+## 环境要求 / Requirements
 
-### 🚀 核心功能
+中文：
 
-根据 `manifest.json` 配置，插件由以下三个独立入口（面板）组成：
+- Adobe Photoshop，manifest 中目标宿主为 `PS`，最低版本为 `25.0`。
+- Adobe UXP Developer Tool，用于本地加载和调试插件。
+- Photoshop 需要先启动并连接到 UXP Developer Tool。
+- 如需使用网络功能，需要允许插件访问网络；manifest 当前配置为 `network.domains: "all"`。
+- 如需使用百度翻译或 AI 生成功能，需要自行准备对应服务的密钥或接口配置。
 
-#### 1. 主面板：设计助理 (`HaimatiPanel`)
-尺寸固定（400x800px）的多功能集成面板。侧边导航栏可无缝切换以下核心功能：
+English:
 
-* **📤 快捷导出 (Quick Export)**
-  * 支持快速导出 PNG（24-bit / 8-bit）及 JPEG 格式。
-  * 可手动设定 JPEG 压缩质量（1-100）。
-  * 自动追踪当前文档的保存路径，或自主浏览指定目标文件夹。
-  * 具备“图层组/第一层级图层”自动批量分割导出模式（可过滤背景图层）。
-* **🪄 生成按钮 (Button Generator)**
-  * 自动计算选中文字图层的尺寸与位置。
-  * 内置高精度 RGB / HEX 颜色选择器。
-  * 支持自定义宽高边距（Offset）及圆角半径（Corner Radius），一键在文字下方生成完美的按钮形状。
-* **✏️ 批量重命名 (Batch Rename)**
-  * 批量更改选中的多个图层名称。
-  * 支持添加数字编号/索引（前缀或后缀），自定义起始序号。
-  * 逻辑清晰，自动按照图层自下而上的顺序进行智能编号。
-* **📋 文档优化 (Document Optimization)**
-  * 智能扫描并精确定位文档中的“空白图层”和“隐藏图层”。
-  * 列表化展示，支持单选或一键全选清理，保持图层树纯净。
-  * 针对智能对象（Smart Object）提供指定目标 DPI 强度的优化转换。
-* **Aa 字体管理 (Font Management)**
-  * 快速检索并过滤 Photoshop 内部已启用的所有字体系列。
-  * 精确调整字号、字距（Tracking）、水平/垂直缩放等核心排版度量。
-  * 支持对齐方式（左/中/右）及画布水平/垂直居中对齐、对象等比例缩放。
-  * 支持“实时应用”样式切换，一键开启光学字距、消除锯齿等高级属性。
-* **🌐 百度翻译 (Baidu Translation)**
-  * 集成百度翻译开放 API，实现图层文本一键国际化。
-  * 支持源语言自动检测，支持中、英、日、韩等多语种互译。
-  * 具备“附文翻译”模式：不覆盖原有文字，自动在原图层下方生成带有翻译结果的新文本图层。
-* **📏 参考线管理 (Guides Management)**
-  * 实时自动获取当前文档的精确宽高像素。
-  * 依据设定的垂直/水平间距（像素值）自动创建网格参考线，或一键清除全部参考线。
-  * 支持基于现有参考线一键自动切片（Create Slices）。
-* **🎨 图像生成 & ⚙️ 连接设置 (AI Assistant)**
-  * **生成模式**：支持 文生图 (Text-to-Image) 和 图生图/图像编辑 (Image-to-Image)。
-  * **AI 模型库**：支持 `gpt-image-2`（标准、全功能、2K、4K 模式）及 `gemini-3 Pro / 3.1 Flash` 预览模型。
-  * **高级控制**：可精确调整画面宽高比（1:1, 3:4, 9:16, 16:9等电商/社交主流比例）、分辨率（1k, 2k, 4k）、图像质量（高/中/低）及单次生成张数。
-  * **任务管理**：支持后台异步生成，内置成果预览网格、分页查看、选择性导出/全部导出及历史清除功能。
-  * **连接管理**：可配置自定义 AI 终结点（默认：`https://ai.t8star.org`）与多组 API 密钥。
+- Adobe Photoshop. The manifest targets `PS` with a minimum version of `25.0`.
+- Adobe UXP Developer Tool for local loading and debugging.
+- Photoshop must be running and connected to UXP Developer Tool before loading the plugin.
+- Network permission is required for online features. The current manifest uses `network.domains: "all"`.
+- Baidu Translate and AI generation require your own service credentials or endpoint configuration.
 
-#### 2. 快捷面板 (`QuickAccessPanel`)
-专为紧凑工作流设计的轻量级悬浮窗（最小可调至 80x100px）。
-* 在主面板上通过 `Ctrl + 左键点击` 任意功能图标，即可将其“钉”至快捷面板。
-* 允许用户在不占用主屏幕空间的情况下，随时调用高频核心功能。
+## 安装与加载 / Installation & Loading
 
-#### 3. 颜色面板 (`ColorPanel`)
-极简调色专栏（最小可调至 24x60px），自适应水平或垂直布局。
-* 实时同步 Photoshop 当前的前景色。
-* 提供自定义色彩预设网格，方便高频吸取与统一设计规范。
+中文：
 
-### 🛠️ 技术栈与架构
+正式使用：
 
-* **平台底座**：Adobe Photoshop UXP (Manifest V6)
-* **前端界面**：HTML5, CSS3, Adobe Spectrum UXP 原生组件
-* **逻辑模式**：模块化 JavaScript (CommonJS `require` 规范)
+1. 解压插件压缩包。
+2. 将解压后的插件文件夹复制到 Photoshop 安装目录下的 `Plug-ins` 文件夹。
+3. 本机示例路径：`C:\Program Files\Adobe\Adobe Photoshop (Beta)\Plug-ins`。
+4. 启动或重启 Adobe Photoshop。
+5. 在 Photoshop 的插件菜单中打开对应面板：设计助手、快捷操作或颜色面板。
 
----
+开发调试：
 
-## English
+1. 启动 Adobe Photoshop。
+2. 启动 Adobe UXP Developer Tool。
+3. 在 UXP Developer Tool 中点击 `Add Plugin`。
+4. 选择本项目目录下的 `manifest.json`。
+5. 确认左侧 `Connected Applications` 中能看到 Photoshop。
+6. 点击 `Load` 加载插件。
 
-`Liangyi Design Assistant` is a high-performance **UXP (Unified Extensibility Platform)** plugin tailored for Adobe Photoshop (v25.0 and above). Built to revolutionize the workflows of visual designers and photo retouchers, it consolidates document optimization, asset exporting, typography control, translation, and cutting-edge AI image generation into a unified workspace.
+English:
 
-The plugin utilizes a decoupled modular architecture, delivering three dedicated panels that function seamlessly together.
+For normal use:
 
-### 🚀 Core Features
+1. Extract the plugin package.
+2. Copy the extracted plugin folder into Photoshop's `Plug-ins` folder.
+3. Example local path: `C:\Program Files\Adobe\Adobe Photoshop (Beta)\Plug-ins`.
+4. Launch or restart Adobe Photoshop.
+5. Open the corresponding panel from the Photoshop plugin menu: Design Assistant, Quick Access, or Color Panel.
 
-Configured via `manifest.json`, the plugin comprises three independent entry points (panels):
+For development and debugging:
 
-#### 1. Main Panel: Design Assistant (`HaimatiPanel`)
-A feature-rich, integrated panel with a fixed size (400x800px). The sidebar navigation enables instant access to the following core modules:
+1. Launch Adobe Photoshop.
+2. Launch Adobe UXP Developer Tool.
+3. Click `Add Plugin` in UXP Developer Tool.
+4. Select the `manifest.json` file in this project folder.
+5. Make sure Photoshop appears under `Connected Applications`.
+6. Click `Load` to load the plugin.
 
-* **📤 Quick Export**
-  * Rapidly exports assets in PNG (24-bit / 8-bit) and JPEG formats.
-  * Adjust JPEG compression quality manually on a scale of 1-100.
-  * Automatically follows the current active document path or allows browsing to a custom directory.
-  * Supports a batch-splitting mode to export top-level layers or groups separately (with background layer filtering).
-* **🪄 Button Generator**
-  * Automatically measures the bound and positioning of selected text layers.
-  * Implements a built-in precise RGB / HEX color picker.
-  * Generates beautifully configured shape layers directly beneath texts based on custom padding offsets and corner radiuses.
-* **✏️ Batch Rename**
-  * Renames multiple chosen layers simultaneously using automated patterns.
-  * Appends sequential indices/serial numbers as either prefixes or suffixes, with customizable starting values.
-  * Applies numbering intelligently from the bottom of the layer stack upwards.
-* **📋 Document Optimization**
-  * Intelligently scans the active document to detect "empty layers" and "hidden layers".
-  * Lists redundant items for individual cleanup or one-click total purging.
-  * Standardizes Smart Objects by automatically applying targeted DPI optimizations.
-* **Aa Font Management**
-  * Instantly retrieves and filters all active font families available within Photoshop.
-  * Direct adjustments for font size, tracking, and horizontal/vertical scales.
-  * Controls paragraph alignment (left/center/right), centers items onto the canvas coordinates, and manages uniform object scaling.
-  * Supports "Live Preview" toggling, optical kerning, and anti-aliasing configurations.
-* **🌐 Baidu Translation**
-  * Integrates Baidu Translation Open API to provide instantaneous multilingual localization.
-  * Supports automatic source language detection, translating between Chinese, English, Japanese, and Korean.
-  * Features an "Append Translation" option that places translated text layers perfectly underneath the original text without overwriting it.
-* **📏 Guides Management**
-  * Captures live document width and height coordinates in precise pixels.
-  * Generates layout grids automatically based on specified vertical/horizontal intervals (in pixels) or clears all guidelines at once.
-  * Provides a shortcut to instantly generate Photoshop user slices directly from active guides.
-* **🎨 AI Image Generation & ⚙️ Connection Settings**
-  * **Modes**: Supports Text-to-Image (Prompting) and Image-to-Image (Image editing).
-  * **Model Support**: Fully compatible with `gpt-image-2` (Standard, Full, 2K, 4K modes) and `gemini-3 Pro / 3.1 Flash` preview engines.
-  * **Granular Controls**: Configure custom aspect ratios (1:1, 3:4, 9:16, 16:9 for e-commerce/social formats), resolutions (1k, 2k, 4k), generation quality, and batch count.
-  * **Task Pipeline**: Background asynchronous operations with an interactive preview grid, pagination, partial/full exports, and history deletion.
-  * **Credentials Management**: Supports multiple custom AI endpoints (Default: `https://ai.t8star.org`) and unique API key profiles.
+## 使用说明 / Usage
 
-#### 2. Quick Access Panel (`QuickAccessPanel`)
-A lightweight floating panel designed to save screen space (adjustable down to 80x100px).
-* Use `Ctrl + Left Click` on any feature icon in the Main Panel to pin it directly to the Quick Access grid.
-* Execute repetitive tasks quickly without needing the bulky Main UI visible.
+中文：
 
-#### 3. Color Panel (`ColorPanel`)
-An ultra-slim color tracking workspace (adjustable down to 24x60px) supporting vertical or horizontal adaptive layouts.
-* Automatically mirrors Photoshop's active foreground color.
-* Displays a grid of user-saved color presets for maintaining strict design systems.
+- 主面板左侧图标用于切换功能模块。
+- 在支持快捷方式的模块中，按住 `Ctrl` 并点击左侧功能图标，可把当前配置保存到快捷操作面板。
+- 快捷导出需要先选择导出位置；启用“使用源文件路径”后会优先使用当前文档所在路径。
+- 生成按钮前，请先选中一个文字图层。
+- 批量重命名前，请先选中需要处理的图层，并检查预览结果。
+- 字体管理会使用 Photoshop 当前可用字体集合。
+- 百度翻译需要先填写并保存百度翻译开放平台的 APP ID 与 API KEY。
+- AI 图像生成需要先在连接设置中配置接口地址、密钥、模型等参数。
 
-### 🛠️ Tech Stack & Architecture
+English:
 
-* **Platform Baseline**: Adobe Photoshop UXP (Manifest V6)
-* **Frontend Interface**: HTML5, CSS3, Native Adobe Spectrum UXP Web Components
-* **Execution Logic**: Modular JavaScript utilizing CommonJS `require` structures
+- Use the icons on the left side of the main panel to switch between modules.
+- In supported modules, hold `Ctrl` and click a feature icon to save the current setup to the Quick Access panel.
+- Quick Export requires an export location. If source-path export is enabled, the plugin prefers the current document path.
+- Select a text layer before using Button Generator.
+- Select target layers and review the preview before running Batch Rename.
+- Font Management uses the font list currently available to Photoshop.
+- Baidu Translate requires saving your Baidu Translate APP ID and API KEY first.
+- AI Image Generation requires endpoint, key, model, and related settings in the connection panel.
 
----
+## 面板说明 / Panels
 
-## 💻 插件安装与调试 / Installation & Debugging
+中文：
 
-### Prerequisites / 前提条件
-* **Adobe Photoshop 2024** or higher (v25.0+)
-* **Adobe UXP Developer Tool (UDT)** installed via Creative Cloud.
+- `HaimatiPanel`：主功能面板，包含导出、按钮、重命名、优化、字体、翻译、参考线、AI 等模块。
+- `QuickAccessPanel`：快捷操作面板，用于执行已保存的常用操作。
+- `ColorPanel`：颜色面板，用于快速应用、保存、移除和交换颜色。
 
-### Setup Steps / Steps
-1. Open **Adobe UXP Developer Tool (UDT)**.
-2. Click **"Add Plugin..."** and select the directory containing this project's `manifest.json`.
-3. Locate `凉意设计助理` in the UDT list and click **"Load"**. The three design panels will instantly load into Photoshop.
-4. Enable **"Watch"** or click **"Reload"** in UDT to see code modifications update live.
-   
-1. 打开 **Adobe UXP Developer Tool (UDT)**。
-2. 点击 **"Add Plugin..."** 按钮，选择包含本插件 `manifest.json` 的项目根目录。
-3. 在 UDT 列表中找到 `凉意设计助理` 并点击 **"Load"**。此时插件对应的三大面板将立即载入 Photoshop。
-4. 在开发过程中可以开启 **"Watch"** 或手动点击 **"Reload"** 即可实现代码修改实时刷新。
+English:
 
----
+- `HaimatiPanel`: the main panel containing export, button generation, rename, optimization, font, translation, guides, and AI modules.
+- `QuickAccessPanel`: a quick-action panel for running saved workflows.
+- `ColorPanel`: a color utility panel for applying, saving, removing, and swapping colors.
 
-## 🔒 权限声明 / Permissions
+## 项目结构 / Project Structure
 
-To function correctly across advanced pipelines, the plugin declares the following explicit system scopes inside `manifest.json`:
-为保证各项高阶自动化工作流正常运行，插件在 `manifest.json` 中声明了以下明确的系统权限：
+```text
+Liangyi_Design_Assistant-1.0.2/
+├─ manifest.json
+├─ index.html
+├─ main.js
+└─ src/
+   ├─ modules/
+   │  ├─ aiAssistantModule.js
+   │  ├─ buttonModule.js
+   │  ├─ colorPanel.js
+   │  ├─ colorPanelRuntime.js
+   │  ├─ deleteLayerModule.js
+   │  ├─ exportModule.js
+   │  ├─ fontModule.js
+   │  ├─ guidesModule.js
+   │  ├─ panel.js
+   │  ├─ quickPanel.js
+   │  ├─ renameModule.js
+   │  ├─ smartObjectModule.js
+   │  └─ translateModule.js
+   └─ styles/
+      ├─ aiAssistant.css
+      ├─ colorPanel.css
+      ├─ main.css
+      └─ quick.css
+```
 
-* `localFileSystem: "fullAccess"`: Used to write and export segmented assets directly to your local file directories. (用于将切片与各类资产直接导出至本地磁盘目录。)
-* `network.domains: "all"`: Required to communicate with the Baidu Translation API and remote AI nodes (e.g., `ai.t8star.org`). (用于与百度翻译开放接口及远程 AI 图像引擎进行网络通信。)
-* `ipc.enablePluginCommunication: true`: Allows the Main Panel and Quick Access Panel to securely pass runtime metadata to each other. (允许主面板与快捷面板跨边界进行实时数据共享与状态同步。)
-* `document / layer read & write permissions`: Crucial for deep introspection and structure manipulations of the Photoshop document layer hierarchy. (深度遍历、修改及重组 Photoshop 文档图层树所需的读写权限。)
-"""
+中文：
 
-with open("README-v2.md", "w", encoding="utf-8") as f:
-    f.write(readme_bilingual_content)
+- `manifest.json` 定义插件 ID、宿主应用、面板入口和权限。
+- `index.html` 是 UXP 插件入口页面。
+- `main.js` 注册入口点并动态加载样式与模块。
+- `src/modules` 存放各功能模块。
+- `src/styles` 存放面板样式。
 
-print("Bilingual README-v2.md successfully generated without Japanese.")
+English:
+
+- `manifest.json` defines the plugin ID, host app, panel entrypoints, and permissions.
+- `index.html` is the UXP entry page.
+- `main.js` registers entrypoints and dynamically loads styles/modules.
+- `src/modules` contains feature modules.
+- `src/styles` contains panel styles.
+
+## 开发说明 / Development Notes
+
+中文：
+
+- 本项目是原生 UXP 插件源码目录，不需要额外构建步骤即可通过 UXP Developer Tool 加载。
+- 修改源码后，可在 UXP Developer Tool 中点击 `Reload` 重新加载。
+- 涉及 Photoshop 文档状态变更的操作应放在 `core.executeAsModal` 中执行。
+- 文件访问应使用 `require("uxp").storage` 提供的 UXP Storage API。
+- Photoshop 操作应使用 `require("photoshop")` 提供的 `app`、`core`、`action` 等 API。
+
+English:
+
+- This is a native UXP plugin source folder and can be loaded directly through UXP Developer Tool without an additional build step.
+- After editing source files, click `Reload` in UXP Developer Tool.
+- Operations that modify the Photoshop document state should run inside `core.executeAsModal`.
+- File access should use the UXP Storage API from `require("uxp").storage`.
+- Photoshop operations should use APIs from `require("photoshop")`, such as `app`, `core`, and `action`.
+
+## 常见问题 / Troubleshooting
+
+### Plugin Load Failed: No applications are connected to the service
+
+中文：
+
+这通常表示 UXP Developer Tool 没有连接到 Photoshop。请先启动 Photoshop，再启动或刷新 UXP Developer Tool，并确认 `Connected Applications` 中出现 Photoshop。
+
+English:
+
+This usually means UXP Developer Tool is not connected to Photoshop. Launch Photoshop first, then start or refresh UXP Developer Tool, and confirm that Photoshop appears under `Connected Applications`.
+
+### 加载后找不到面板 / Panel does not appear after loading
+
+中文：
+
+请检查插件是否处于 `Loaded` 状态，然后在 Photoshop 的插件菜单中查找设计助手、快捷操作或颜色面板。必要时点击 `Reload`。
+
+English:
+
+Check that the plugin is marked as `Loaded`, then open the Design Assistant, Quick Access, or Color Panel from the Photoshop plugin menu. Click `Reload` if needed.
+
+### 翻译或 AI 功能不可用 / Translation or AI generation does not work
+
+中文：
+
+请确认网络权限、接口地址、密钥和服务账号状态。百度翻译需要有效的 APP ID 与 API KEY。
+
+English:
+
+Check network permission, endpoint URL, API key, and service account status. Baidu Translate requires a valid APP ID and API KEY.
+
+## 权限说明 / Permissions
+
+中文：
+
+manifest 当前声明了文档读写、图层读写、图层复制、本地文件系统、网络和插件通信权限。这些权限用于导出文件、保存配置、读取/修改图层、访问翻译或 AI 接口。
+
+English:
+
+The current manifest declares permissions for document read/write, layer read/write, layer copy, local file system access, network access, and plugin communication. These permissions support file export, settings storage, layer operations, and translation/AI requests.
+
+## 版本信息 / Version
+
+中文：
+
+- 插件 ID：`com.liangyi.designAssistant`
+- manifest 版本号：`1.0.0`
+- 当前目录名：`Liangyi_Design_Assistant-1.0.2`
+
+English:
+
+- Plugin ID: `com.liangyi.designAssistant`
+- Manifest version: `1.0.0`
+- Current folder name: `Liangyi_Design_Assistant-1.0.2`
+
+## 许可 / License
+
+中文：
+
+当前仓库未包含明确的许可证文件。发布或分发前，请补充 LICENSE 文件并明确授权范围。
+
+English:
+
+No explicit license file is included in the current repository. Add a LICENSE file and clarify usage rights before publishing or distributing the plugin.
