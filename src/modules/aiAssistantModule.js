@@ -15,6 +15,7 @@ const DEFAULT_MODERATION = "auto";
 const DEFAULT_POLL_INTERVAL_MS = 5000;
 const GENERATION_TIMEOUT_MS = 200000;
 const GENERATION_STATUS_INTERVAL_MS = 1000;
+const RESULT_LAYER_NAME_PREFIX = "\u51c9\u610fAI_";
 const PROMPT_MIN_ROWS = 6;
 const PROMPT_MAX_ROWS = 16;
 const SIZE_MAP = {
@@ -1165,7 +1166,8 @@ function numericValue(value) {
 async function insertFilesIntoPhotoshop(files) {
   await core.executeAsModal(async () => {
     const activeDocument = app.documents.length ? app.activeDocument : null;
-    for (const file of files) {
+    for (let index = 0; index < files.length; index += 1) {
+      const file = files[index];
       if (!activeDocument) {
         await app.open(file);
         continue;
@@ -1181,6 +1183,7 @@ async function insertFilesIntoPhotoshop(files) {
       if (!newLayer || !newLayer.bounds) {
         continue;
       }
+      newLayer.name = `${RESULT_LAYER_NAME_PREFIX}${index + 1}`;
 
       const bounds = newLayer.bounds;
       const boundsWidth = numericValue(bounds.right) - numericValue(bounds.left);
