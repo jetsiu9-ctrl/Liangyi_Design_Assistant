@@ -12,8 +12,9 @@ const MAX_REFERENCE_IMAGES = 8;
 const DEFAULT_OUTPUT_FORMAT = "png";
 const DEFAULT_BACKGROUND = "auto";
 const DEFAULT_MODERATION = "auto";
-const DEFAULT_RESPONSE_FORMAT = "url";
 const DEFAULT_POLL_INTERVAL_MS = 5000;
+const GENERATION_TIMEOUT_MS = 200000;
+const GENERATION_STATUS_INTERVAL_MS = 1000;
 const PROMPT_MIN_ROWS = 6;
 const PROMPT_MAX_ROWS = 16;
 const SIZE_MAP = {
@@ -54,13 +55,133 @@ let currentPreviewUrl = "";
 let referenceImages = [];
 let activeGenerationCount = 0;
 let resultFileSequence = 0;
+let generationStatusSequence = 0;
+let globalStatusMessage = "就绪。";
+const generationStatusItems = new Map();
 
 function element(id) {
   return document.getElementById(id);
 }
 
 function setStatus(message) {
-  element("statusText").textContent = message;
+  globalStatusMessage = message;
+  if (generationStatusItems.size > 0 && !hasActiveGenerationStatuses()) {
+    generationStatusItems.clear();
+    generationStatusSequence = 0;
+  }
+  renderStatus();
+}
+
+function hasActiveGenerationStatuses() {
+  return Array.from(generationStatusItems.values()).some((item) => item.active);
+}
+
+function renderStatus() {
+  const items = Array.from(generationStatusItems.values());
+  element("statusText").textContent = items.length
+    ? items.map(formatGenerationStatus).join("\n")
+    : globalStatusMessage;
+}
+
+function getGenerationTimeoutSeconds() {
+  return Math.ceil(GENERATION_TIMEOUT_MS / 1000);
+}
+
+function createGenerationTimeoutError() {
+  return new Error(`图像生成已超时（${getGenerationTimeoutSeconds()} 秒），已停止等待。`);
+}
+
+function isAbortError(error) {
+  return error && (error.name === "AbortError" || error.code === 20);
+}
+
+function assertGenerationNotTimedOut(timeoutState) {
+  if (timeoutState && timeoutState.timedOut) {
+    throw createGenerationTimeoutError();
+  }
+}
+
+function formatGenerationStatus(timeoutState) {
+  const elapsedSeconds = Math.min(
+    getGenerationTimeoutSeconds(),
+    Math.floor((Date.now() - timeoutState.startedAt) / 1000)
+  );
+  return `${timeoutState.label}：${timeoutState.message} 用时 ${elapsedSeconds}/${getGenerationTimeoutSeconds()} 秒`;
+}
+
+function refreshGenerationStatus(timeoutState, message) {
+  if (!timeoutState) {
+    if (message) {
+      setStatus(message);
+    }
+    return;
+  }
+  if (message) {
+    timeoutState.message = message;
+  }
+  if (!timeoutState.timedOut) {
+    renderStatus();
+  }
+}
+
+function startGenerationTimeout(message) {
+  if (generationStatusItems.size > 0 && !hasActiveGenerationStatuses()) {
+    generationStatusItems.clear();
+    generationStatusSequence = 0;
+  }
+  generationStatusSequence += 1;
+  const controller = typeof AbortController === "function" ? new AbortController() : null;
+  const timeoutState = {
+    active: true,
+    controller,
+    id: `generation-${Date.now()}-${generationStatusSequence}`,
+    intervalId: null,
+    label: `第${generationStatusSequence}张`,
+    message: message || "正在提交图像生成请求...",
+    reject: null,
+    startedAt: Date.now(),
+    timedOut: false,
+    timeoutId: null,
+    timeoutPromise: null
+  };
+
+  timeoutState.timeoutPromise = new Promise((resolve, reject) => {
+    timeoutState.reject = reject;
+  });
+  timeoutState.timeoutId = setTimeout(() => {
+    timeoutState.timedOut = true;
+    if (timeoutState.controller) {
+      timeoutState.controller.abort();
+    }
+    timeoutState.message = `已超时（${getGenerationTimeoutSeconds()} 秒），已停止等待`;
+    renderStatus();
+    timeoutState.reject(createGenerationTimeoutError());
+  }, GENERATION_TIMEOUT_MS);
+  generationStatusItems.set(timeoutState.id, timeoutState);
+  timeoutState.intervalId = setInterval(() => {
+    refreshGenerationStatus(timeoutState);
+  }, GENERATION_STATUS_INTERVAL_MS);
+  refreshGenerationStatus(timeoutState);
+  return timeoutState;
+}
+
+function stopGenerationTimeout(timeoutState) {
+  if (!timeoutState) {
+    return;
+  }
+  clearTimeout(timeoutState.timeoutId);
+  clearInterval(timeoutState.intervalId);
+  timeoutState.active = false;
+  renderStatus();
+}
+
+function finishGenerationStatus(timeoutState, message) {
+  if (!timeoutState) {
+    return;
+  }
+  timeoutState.message = message;
+  timeoutState.active = false;
+  renderStatus();
 }
 
 function setBusy(isBusy) {
@@ -84,8 +205,20 @@ function setActiveModule(moduleName) {
   element("generateModuleButton").classList.toggle("is-active", !connectionActive);
 }
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function sleep(ms, timeoutState) {
+  assertGenerationNotTimedOut(timeoutState);
+  return new Promise((resolve, reject) => {
+    const timerId = setTimeout(() => {
+      assertGenerationNotTimedOut(timeoutState);
+      resolve();
+    }, ms);
+    if (timeoutState) {
+      timeoutState.timeoutPromise.catch((error) => {
+        clearTimeout(timerId);
+        reject(error);
+      });
+    }
+  });
 }
 
 function normalizeBaseUrl(value) {
@@ -344,7 +477,6 @@ function appendCommonJsonPayload(payload) {
   payload.output_format = DEFAULT_OUTPUT_FORMAT;
   payload.moderation = DEFAULT_MODERATION;
   payload.n = getImageCount();
-  payload.response_format = DEFAULT_RESPONSE_FORMAT;
   return payload;
 }
 
@@ -356,7 +488,6 @@ function appendCommonFormFields(form) {
   form.append("output_format", DEFAULT_OUTPUT_FORMAT);
   form.append("moderation", DEFAULT_MODERATION);
   form.append("n", String(getImageCount()));
-  form.append("response_format", DEFAULT_RESPONSE_FORMAT);
 }
 
 async function getSettingsFile(overwrite) {
@@ -466,9 +597,16 @@ function requestHeaders(contentType) {
   return headers;
 }
 
-async function requestJson(url, options) {
-  const response = await fetch(url, options);
+async function requestJson(url, options, timeoutState) {
+  assertGenerationNotTimedOut(timeoutState);
+  const requestOptions = { ...(options || {}) };
+  if (timeoutState?.controller) {
+    requestOptions.signal = timeoutState.controller.signal;
+  }
+  const response = await fetch(url, requestOptions);
+  assertGenerationNotTimedOut(timeoutState);
   const text = await response.text();
+  assertGenerationNotTimedOut(timeoutState);
   let data = {};
   try {
     data = text ? JSON.parse(text) : {};
@@ -549,15 +687,16 @@ function taskFailed(data) {
   return ["failed", "failure", "error", "cancelled", "canceled"].includes(status);
 }
 
-async function pollTask(taskId) {
+async function pollTask(taskId, timeoutState) {
   for (let attempt = 1; attempt <= MAX_POLL_ATTEMPTS; attempt += 1) {
+    refreshGenerationStatus(timeoutState, `正在查询图像任务 ${taskId}：${attempt}/${MAX_POLL_ATTEMPTS}`);
     setStatus(`正在查询任务 ${taskId}：${attempt}/${MAX_POLL_ATTEMPTS}`);
-    await sleep(DEFAULT_POLL_INTERVAL_MS);
+    await sleep(DEFAULT_POLL_INTERVAL_MS, timeoutState);
 
     const data = await requestJson(apiUrl(`/v1/images/tasks/${encodeURIComponent(taskId)}`), {
       method: "GET",
       headers: requestHeaders("application/json")
-    });
+    }, timeoutState);
 
     if (taskFailed(data)) {
       throw new Error(data?.error?.message || data?.message || "图像任务失败。");
@@ -740,12 +879,13 @@ function bindPromptAutoRows() {
   updatePromptRows();
 }
 
-async function submitTextToImage(prompt) {
+async function submitTextToImage(prompt, timeoutState) {
   const payload = appendCommonJsonPayload({ prompt });
+  refreshGenerationStatus(timeoutState, `正在提交生成请求：模型 ${payload.model}，尺寸 ${payload.size}`);
   setStatus(`正在提交生成请求：模型 ${payload.model}，尺寸 ${payload.size}`);
 
   if (isGeminiImageModel(payload.model)) {
-    return submitGeminiImages(prompt, []);
+    return submitGeminiImages(prompt, [], timeoutState);
   }
 
   const useAsync = Boolean(element("asyncCheckbox").checked);
@@ -753,22 +893,23 @@ async function submitTextToImage(prompt) {
     method: "POST",
     headers: requestHeaders("application/json"),
     body: JSON.stringify(payload)
-  });
+  }, timeoutState);
 }
 
-async function submitImageEdit(prompt) {
+async function submitImageEdit(prompt, timeoutState) {
   if (!referenceImages.length) {
     throw new Error("使用编辑模式前，请至少添加一张当前画布参考图。");
   }
 
   const model = getModelValue();
   if (isGeminiImageModel(model)) {
-    return submitGeminiImages(prompt, referenceImages);
+    return submitGeminiImages(prompt, referenceImages, timeoutState);
   }
 
   const form = new FormData();
   form.append("prompt", prompt);
   appendCommonFormFields(form);
+  refreshGenerationStatus(timeoutState, `正在提交图像编辑请求：模型 ${getModelValue()}，尺寸 ${getActualSize()}`);
   setStatus(`正在提交图像编辑请求：模型 ${getModelValue()}，尺寸 ${getActualSize()}`);
 
   referenceImages.forEach((item, index) => {
@@ -780,10 +921,10 @@ async function submitImageEdit(prompt) {
     method: "POST",
     headers: requestHeaders(),
     body: form
-  });
+  }, timeoutState);
 }
 
-async function submitGeminiImage(prompt, images) {
+async function submitGeminiImage(prompt, images, timeoutState) {
   const model = getModelValue();
   const parts = [];
   images.forEach((item) => {
@@ -814,19 +955,20 @@ async function submitGeminiImage(prompt, images) {
     method: "POST",
     headers: requestHeaders("application/json"),
     body: JSON.stringify(payload)
-  });
+  }, timeoutState);
 }
 
-async function submitGeminiImages(prompt, images) {
+async function submitGeminiImages(prompt, images, timeoutState) {
   const count = getImageCount();
   const model = getModelValue();
   const aspectRatio = getGeminiAspectRatio();
   const imageSize = getGeminiImageSize();
+  refreshGenerationStatus(timeoutState, `正在并发提交 Gemini 图像请求：共 ${count} 次，模型 ${model}，比例 ${aspectRatio}，尺寸 ${imageSize}`);
   setStatus(`正在并发提交 Gemini 图像请求：共 ${count} 次，模型 ${model}，比例 ${aspectRatio}，尺寸 ${imageSize}`);
 
   const results = [];
   const requests = Array.from({ length: count }, async (_, index) => {
-    const data = await submitGeminiImage(prompt, images);
+    const data = await submitGeminiImage(prompt, images, timeoutState);
     const imageItems = extractImageItems(data);
     if (!imageItems.length) {
       throw new Error(`第 ${index + 1} 次 Gemini 请求没有返回图像。`);
@@ -853,37 +995,48 @@ function createResultFileName(index, extension) {
   return `zhenzhen-result-${Date.now()}-${resultFileSequence}-${index}.${extension}`;
 }
 
-async function fileFromBase64(item, index) {
+async function fileFromBase64(item, index, timeoutState) {
+  assertGenerationNotTimedOut(timeoutState);
   const b64 = String(item.b64_json || "").replace(/^data:image\/[a-z]+;base64,/iu, "");
   const bytes = Uint8Array.from(atob(b64), (char) => char.charCodeAt(0));
+  assertGenerationNotTimedOut(timeoutState);
   const tempFolder = await storage.localFileSystem.getTemporaryFolder();
   const extension = getImageExtension(item);
   const file = await tempFolder.createFile(createResultFileName(index, extension), { overwrite: true });
+  assertGenerationNotTimedOut(timeoutState);
   await file.write(bytes.buffer, { format: storage.formats.binary });
+  assertGenerationNotTimedOut(timeoutState);
   return file;
 }
 
-async function fileFromUrl(item, index) {
-  const response = await fetch(item.url);
+async function fileFromUrl(item, index, timeoutState) {
+  assertGenerationNotTimedOut(timeoutState);
+  const requestOptions = timeoutState?.controller ? { signal: timeoutState.controller.signal } : {};
+  const response = await fetch(item.url, requestOptions);
+  assertGenerationNotTimedOut(timeoutState);
   if (!response.ok) {
     throw new Error(`无法下载生成图像：HTTP ${response.status}`);
   }
   const bytes = await response.arrayBuffer();
+  assertGenerationNotTimedOut(timeoutState);
   const tempFolder = await storage.localFileSystem.getTemporaryFolder();
   const extension = DEFAULT_OUTPUT_FORMAT;
   const file = await tempFolder.createFile(createResultFileName(index, extension), { overwrite: true });
+  assertGenerationNotTimedOut(timeoutState);
   await file.write(bytes, { format: storage.formats.binary });
+  assertGenerationNotTimedOut(timeoutState);
   return file;
 }
 
-async function saveResultFiles(items) {
+async function saveResultFiles(items, timeoutState) {
   const files = [];
   for (let index = 0; index < items.length; index += 1) {
+    assertGenerationNotTimedOut(timeoutState);
     const item = items[index];
     if (item.b64_json) {
-      files.push(await fileFromBase64(item, index));
+      files.push(await fileFromBase64(item, index, timeoutState));
     } else if (item.url) {
-      files.push(await fileFromUrl(item, index));
+      files.push(await fileFromUrl(item, index, timeoutState));
     }
   }
   return files;
@@ -1046,6 +1199,39 @@ async function insertFilesIntoPhotoshop(files) {
   }, { commandName: "插入生成图像" });
 }
 
+async function runGenerationFlow(prompt, timeoutState) {
+  const mode = getPickerValue("modePicker");
+  const submitResult = mode === "img2img"
+    ? await submitImageEdit(prompt, timeoutState)
+    : await submitTextToImage(prompt, timeoutState);
+  assertGenerationNotTimedOut(timeoutState);
+
+  const taskId = extractTaskId(submitResult);
+  const directImages = extractImageItems(submitResult);
+  if (!directImages.length && !taskId) {
+    throw new Error("接口没有返回图像数据或 task_id。");
+  }
+
+  const finalResult = directImages.length > 0 ? submitResult : await pollTask(taskId, timeoutState);
+  assertGenerationNotTimedOut(timeoutState);
+
+  const images = extractImageItems(finalResult);
+  if (!images.length) {
+    throw new Error("接口没有返回图像 URL 或 base64 图像。");
+  }
+
+  refreshGenerationStatus(timeoutState, "正在保存生成图像...");
+  const resultFiles = await saveResultFiles(images, timeoutState);
+  assertGenerationNotTimedOut(timeoutState);
+
+  await appendResultFiles(resultFiles);
+  assertGenerationNotTimedOut(timeoutState);
+
+  const elapsedSeconds = Math.floor((Date.now() - timeoutState.startedAt) / 1000);
+  setStatus(`完成。已追加 ${resultFiles.length} 张图像，当前共 ${lastResultFiles.length} 张。总用时 ${elapsedSeconds} 秒`);
+  finishGenerationStatus(timeoutState, `完成。已追加 ${resultFiles.length} 张图像，当前共 ${lastResultFiles.length} 张。总用时 ${elapsedSeconds} 秒`);
+}
+
 async function generate() {
   const prompt = String(element("promptInput").value || "").trim();
   if (!prompt) {
@@ -1053,6 +1239,24 @@ async function generate() {
   }
 
   activeGenerationCount += 1;
+  const timeoutState = startGenerationTimeout(`正在提交图像请求... 当前进行中 ${activeGenerationCount} 个`);
+  try {
+    return await Promise.race([
+      runGenerationFlow(prompt, timeoutState),
+      timeoutState.timeoutPromise
+    ]);
+  } catch (error) {
+    if (timeoutState.timedOut || isAbortError(error)) {
+      finishGenerationStatus(timeoutState, `已超时（${getGenerationTimeoutSeconds()} 秒），已停止等待`);
+      return;
+    }
+    finishGenerationStatus(timeoutState, `失败：${error.message}`);
+    return;
+  } finally {
+    stopGenerationTimeout(timeoutState);
+    activeGenerationCount = Math.max(0, activeGenerationCount - 1);
+    updateResultButtons(element("generateButton").disabled);
+  }
   setStatus(`正在提交图像请求... 当前进行中 ${activeGenerationCount} 个`);
 
   try {

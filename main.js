@@ -680,9 +680,6 @@ function getMainPanelHTML() {
                                 <sp-picker id="modelPicker">
                                     <sp-menu slot="options">
                                         <sp-menu-item value="gpt-image-2" selected>gpt-image-2</sp-menu-item>
-                                        <sp-menu-item value="gpt-image-2-all">gpt-image-2-all</sp-menu-item>
-                                        <sp-menu-item value="gpt-image-2-2K">gpt-image-2-2K</sp-menu-item>
-                                        <sp-menu-item value="gpt-image-2-4K">gpt-image-2-4K</sp-menu-item>
                                         <sp-menu-item value="gemini-3-pro-image-preview">gemini-3-pro-image-preview</sp-menu-item>
                                         <sp-menu-item value="gemini-3.1-flash-image-preview">gemini-3.1-flash-image-preview</sp-menu-item>
                                     </sp-menu>

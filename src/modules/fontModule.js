@@ -237,6 +237,24 @@
         });
     }
 
+    async function restoreActiveLayers(action, layers) {
+        const targets = Array.from(layers || [])
+            .filter(layer => layer && layer.id)
+            .map(layer => ({ _ref: 'layer', _id: layer.id }));
+
+        if (!targets.length) {
+            return;
+        }
+
+        await action.batchPlay([{
+            _obj: 'select',
+            _target: targets,
+            makeVisible: false
+        }], {
+            dialogOptions: 'dontDisplay'
+        });
+    }
+
     async function doExecute(overrideSettings) {
         const previousSettings = settings;
         settings = normalizeSettings(overrideSettings ? { ...settings, ...overrideSettings } : settings);
@@ -303,6 +321,12 @@
 
                 if (updatedCount === 0) {
                     throw new Error('选中项中没有可修改的文字图层');
+                }
+
+                try {
+                    await restoreActiveLayers(action, selectedLayers);
+                } catch (restoreError) {
+                    console.warn('[FontModule] 恢复图层选区失败:', restoreError);
                 }
 
                 historySuspension.finalName = historyName;

@@ -95,6 +95,10 @@
     margin-top: 8px;
 }
 
+.ai-assistant-panel #statusText {
+    white-space: pre-line;
+}
+
 .ai-assistant-panel .interface-picker-row {
     flex-wrap: nowrap;
 }
