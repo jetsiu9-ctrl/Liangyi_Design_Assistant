@@ -1,7 +1,7 @@
 {
     "id": "com.liangyi.designAssistant",
     "name": "凉意设计助理",
-    "version": "1.0.0",
+    "version": "1.0.4",
     "main": "index.html",
     "manifestVersion": 6,
     "host": {
