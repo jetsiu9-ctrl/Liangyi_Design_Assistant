@@ -238,8 +238,8 @@ English:
 
 中文：
 
-当前仓库未包含明确的许可证文件。发布或分发前，请补充 LICENSE 文件并明确授权范围。
+本项目完全免费开源，可自由使用、学习、修改与分享。
 
 English:
 
-No explicit license file is included in the current repository. Add a LICENSE file and clarify usage rights before publishing or distributing the plugin.
+This project is completely free and open source. You may use, study, modify, and share it freely.

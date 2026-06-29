@@ -451,7 +451,7 @@ function getActualSize() {
 
 function getGeminiAspectRatio() {
   const aspectRatio = getPickerValue("aspectRatioPicker");
-  return aspectRatio === "auto" ? "1:1" : aspectRatio;
+  return aspectRatio === "auto" ? "" : aspectRatio;
 }
 
 function getGeminiImageSize() {
@@ -927,6 +927,13 @@ async function submitImageEdit(prompt, timeoutState) {
 
 async function submitGeminiImage(prompt, images, timeoutState) {
   const model = getModelValue();
+  const aspectRatio = getGeminiAspectRatio();
+  const imageConfig = {
+    imageSize: getGeminiImageSize()
+  };
+  if (aspectRatio) {
+    imageConfig.aspectRatio = aspectRatio;
+  }
   const parts = [];
   images.forEach((item) => {
     parts.push({
@@ -944,10 +951,7 @@ async function submitGeminiImage(prompt, images, timeoutState) {
       role: "user"
     }],
     generationConfig: {
-      imageConfig: {
-        aspectRatio: getGeminiAspectRatio(),
-        imageSize: getGeminiImageSize()
-      },
+      imageConfig,
       responseModalities: ["IMAGE"]
     }
   };
@@ -962,7 +966,7 @@ async function submitGeminiImage(prompt, images, timeoutState) {
 async function submitGeminiImages(prompt, images, timeoutState) {
   const count = getImageCount();
   const model = getModelValue();
-  const aspectRatio = getGeminiAspectRatio();
+  const aspectRatio = getPickerValue("aspectRatioPicker");
   const imageSize = getGeminiImageSize();
   refreshGenerationStatus(timeoutState, `正在并发提交 Gemini 图像请求：共 ${count} 次，模型 ${model}，比例 ${aspectRatio}，尺寸 ${imageSize}`);
   setStatus(`正在并发提交 Gemini 图像请求：共 ${count} 次，模型 ${model}，比例 ${aspectRatio}，尺寸 ${imageSize}`);
