@@ -41,7 +41,8 @@
         },
         "network": {
             "domains": "all"
-        }
+        },
+        "clipboard": "readAndWrite"
     },
     "permissions": [
         "document.read",

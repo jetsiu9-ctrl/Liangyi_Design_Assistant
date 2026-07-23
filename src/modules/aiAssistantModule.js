@@ -6,14 +6,16 @@ const { storage, shell } = require("uxp");
 
 const DEFAULT_BASE_URL = "https://ai.t8star.org";
 const DEFAULT_INTERFACE_NAME = "默认接口";
-const CONFIG_FILE = "zhenzhen-ai-settings.json";
+const CONFIG_FILE = "liangyi-ai-settings.json";
+const LEGACY_CONFIG_FILE = "zhenzhen-ai-settings.json";
 const MAX_POLL_ATTEMPTS = 120;
 const MAX_REFERENCE_IMAGES = 8;
 const DEFAULT_OUTPUT_FORMAT = "png";
 const DEFAULT_BACKGROUND = "auto";
 const DEFAULT_MODERATION = "auto";
 const DEFAULT_POLL_INTERVAL_MS = 5000;
-const GENERATION_TIMEOUT_MS = 200000;
+const DEFAULT_GENERATION_TIMEOUT_SECONDS = 300;
+const MAX_GENERATION_TIMEOUT_SECONDS = 2147483;
 const GENERATION_STATUS_INTERVAL_MS = 1000;
 const RESULT_LAYER_NAME_PREFIX = "\u51c9\u610fAI_";
 const PROMPT_MIN_ROWS = 6;
@@ -47,9 +49,13 @@ let settings = {
   baseUrl: DEFAULT_BASE_URL,
   apiKey: "",
   currentInterfaceId: "",
-  interfaces: []
+  interfaces: [],
+  outputFolderToken: "",
+  outputFolderPath: "",
+  generationTimeoutSeconds: DEFAULT_GENERATION_TIMEOUT_SECONDS
 };
 let editingInterfaceId = "";
+let outputFolderEntry = null;
 let lastResultFiles = [];
 let currentResultIndex = 0;
 let currentPreviewUrl = "";
@@ -84,12 +90,20 @@ function renderStatus() {
     : globalStatusMessage;
 }
 
-function getGenerationTimeoutSeconds() {
-  return Math.ceil(GENERATION_TIMEOUT_MS / 1000);
+function normalizeGenerationTimeoutSeconds(value) {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > MAX_GENERATION_TIMEOUT_SECONDS) {
+    return DEFAULT_GENERATION_TIMEOUT_SECONDS;
+  }
+  return parsed;
 }
 
-function createGenerationTimeoutError() {
-  return new Error(`图像生成已超时（${getGenerationTimeoutSeconds()} 秒），已停止等待。`);
+function getGenerationTimeoutSeconds(timeoutState) {
+  return timeoutState?.timeoutSeconds || normalizeGenerationTimeoutSeconds(settings.generationTimeoutSeconds);
+}
+
+function createGenerationTimeoutError(timeoutState) {
+  return new Error(`图像生成已超时（${getGenerationTimeoutSeconds(timeoutState)} 秒），已停止等待。`);
 }
 
 function isAbortError(error) {
@@ -98,16 +112,17 @@ function isAbortError(error) {
 
 function assertGenerationNotTimedOut(timeoutState) {
   if (timeoutState && timeoutState.timedOut) {
-    throw createGenerationTimeoutError();
+    throw createGenerationTimeoutError(timeoutState);
   }
 }
 
 function formatGenerationStatus(timeoutState) {
+  const timeoutSeconds = getGenerationTimeoutSeconds(timeoutState);
   const elapsedSeconds = Math.min(
-    getGenerationTimeoutSeconds(),
+    timeoutSeconds,
     Math.floor((Date.now() - timeoutState.startedAt) / 1000)
   );
-  return `${timeoutState.label}：${timeoutState.message} 用时 ${elapsedSeconds}/${getGenerationTimeoutSeconds()} 秒`;
+  return `${timeoutState.label}：${timeoutState.message} 用时 ${elapsedSeconds}/${timeoutSeconds} 秒`;
 }
 
 function refreshGenerationStatus(timeoutState, message) {
@@ -132,6 +147,7 @@ function startGenerationTimeout(message) {
   }
   generationStatusSequence += 1;
   const controller = typeof AbortController === "function" ? new AbortController() : null;
+  const timeoutSeconds = getGenerationTimeoutSeconds();
   const timeoutState = {
     active: true,
     controller,
@@ -143,7 +159,8 @@ function startGenerationTimeout(message) {
     startedAt: Date.now(),
     timedOut: false,
     timeoutId: null,
-    timeoutPromise: null
+    timeoutPromise: null,
+    timeoutSeconds
   };
 
   timeoutState.timeoutPromise = new Promise((resolve, reject) => {
@@ -154,10 +171,10 @@ function startGenerationTimeout(message) {
     if (timeoutState.controller) {
       timeoutState.controller.abort();
     }
-    timeoutState.message = `已超时（${getGenerationTimeoutSeconds()} 秒），已停止等待`;
+    timeoutState.message = `已超时（${getGenerationTimeoutSeconds(timeoutState)} 秒），已停止等待`;
     renderStatus();
-    timeoutState.reject(createGenerationTimeoutError());
-  }, GENERATION_TIMEOUT_MS);
+    timeoutState.reject(createGenerationTimeoutError(timeoutState));
+  }, timeoutSeconds * 1000);
   generationStatusItems.set(timeoutState.id, timeoutState);
   timeoutState.intervalId = setInterval(() => {
     refreshGenerationStatus(timeoutState);
@@ -196,6 +213,8 @@ function setBusy(isBusy) {
   element("cancelInterfaceActionButton").disabled = isBusy;
   element("saveInterfaceButton").disabled = isBusy;
   element("cancelInterfaceButton").disabled = isBusy;
+  element("selectOutputFolderButton").disabled = isBusy;
+  element("saveGenerationSettingsButton").disabled = isBusy;
 }
 
 function setActiveModule(moduleName) {
@@ -262,7 +281,10 @@ function normalizeSettingsData(value) {
     baseUrl: currentInterface.baseUrl,
     apiKey: currentInterface.apiKey,
     currentInterfaceId: currentInterface.id,
-    interfaces
+    interfaces,
+    outputFolderToken: String(value?.outputFolderToken || ""),
+    outputFolderPath: String(value?.outputFolderPath || ""),
+    generationTimeoutSeconds: normalizeGenerationTimeoutSeconds(value?.generationTimeoutSeconds)
   };
 }
 
@@ -496,29 +518,122 @@ async function getSettingsFile(overwrite) {
   return dataFolder.createFile(CONFIG_FILE, { overwrite: Boolean(overwrite) });
 }
 
-async function loadSettings() {
+async function readSettingsFile(fileName) {
+  const dataFolder = await storage.localFileSystem.getDataFolder();
+  const file = await dataFolder.getEntry(fileName);
+  const text = await file.read();
+  return JSON.parse(text);
+}
+
+async function persistSettings() {
+  const file = await getSettingsFile(true);
+  await file.write(JSON.stringify(settings, null, 2));
+}
+
+function updateOutputFolderUi() {
+  const pathField = element("outputFolderPath");
+  if (!pathField) {
+    return;
+  }
+  let displayPath = settings.outputFolderPath || "尚未选择保存目录";
+  if (settings.outputFolderToken && !outputFolderEntry) {
+    displayPath += "（需要重新选择）";
+  }
+  pathField.value = displayPath;
+  pathField.title = displayPath;
+}
+
+function applyGenerationSettingsToFields() {
+  const timeoutInput = element("generationTimeoutInput");
+  if (timeoutInput) {
+    timeoutInput.value = String(settings.generationTimeoutSeconds);
+  }
+  const timeoutStatus = element("generationTimeoutStatus");
+  if (timeoutStatus) {
+    timeoutStatus.textContent = `当前任务超时时长：${settings.generationTimeoutSeconds} 秒。`;
+  }
+}
+
+async function saveGenerationSettings() {
+  const rawValue = String(element("generationTimeoutInput").value || "").trim();
+  const timeoutSeconds = Number(rawValue);
+  if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 1 || timeoutSeconds > MAX_GENERATION_TIMEOUT_SECONDS) {
+    throw new Error(`任务超时时长必须是 1 至 ${MAX_GENERATION_TIMEOUT_SECONDS} 之间的整数秒数。`);
+  }
+  settings.generationTimeoutSeconds = timeoutSeconds;
+  syncCurrentInterfaceFromFields();
+  await persistSettings();
+  applyGenerationSettingsToFields();
+  setStatus(`任务超时时长已保存：${timeoutSeconds} 秒，将用于后续生成任务。`);
+}
+
+async function restoreOutputFolder() {
+  outputFolderEntry = null;
+  if (!settings.outputFolderToken) {
+    updateOutputFolderUi();
+    return null;
+  }
   try {
-    const dataFolder = await storage.localFileSystem.getDataFolder();
-    const file = await dataFolder.getEntry(CONFIG_FILE);
-    const text = await file.read();
-    const parsed = JSON.parse(text);
-    settings = normalizeSettingsData(parsed);
+    const entry = await storage.localFileSystem.getEntryForPersistentToken(settings.outputFolderToken);
+    if (!entry || !entry.isFolder) {
+      throw new Error("保存路径不是文件夹。");
+    }
+    outputFolderEntry = entry;
+    settings.outputFolderPath = entry.nativePath || settings.outputFolderPath || entry.name;
   } catch (error) {
-    settings = normalizeSettingsData({
-      baseUrl: DEFAULT_BASE_URL,
-      apiKey: ""
-    });
+    outputFolderEntry = null;
+  }
+  updateOutputFolderUi();
+  return outputFolderEntry;
+}
+
+async function selectOutputFolder() {
+  const folder = await storage.localFileSystem.getFolder();
+  if (!folder) {
+    return;
+  }
+  const token = await storage.localFileSystem.createPersistentToken(folder);
+  outputFolderEntry = folder;
+  settings.outputFolderToken = token;
+  settings.outputFolderPath = folder.nativePath || folder.name;
+  syncCurrentInterfaceFromFields();
+  await persistSettings();
+  updateOutputFolderUi();
+  setStatus(`图像保存目录已设置：${settings.outputFolderPath}`);
+}
+
+async function loadSettings() {
+  let parsed = null;
+  let migratedLegacySettings = false;
+  try {
+    parsed = await readSettingsFile(CONFIG_FILE);
+  } catch (error) {
+    try {
+      parsed = await readSettingsFile(LEGACY_CONFIG_FILE);
+      migratedLegacySettings = true;
+    } catch (legacyError) {
+      parsed = {
+        baseUrl: DEFAULT_BASE_URL,
+        apiKey: ""
+      };
+    }
   }
 
+  settings = normalizeSettingsData(parsed);
+  await restoreOutputFolder();
+  if (migratedLegacySettings) {
+    await persistSettings();
+  }
   applyCurrentInterfaceToFields();
   renderInterfacePicker();
+  updateOutputFolderUi();
+  applyGenerationSettingsToFields();
 }
 
 async function saveSettings() {
   syncCurrentInterfaceFromFields();
 
-  const file = await getSettingsFile(true);
-  await file.write(JSON.stringify(settings, null, 2));
+  await persistSettings();
   element("baseUrlInput").value = settings.baseUrl;
   renderInterfacePicker();
   setStatus("设置已保存。");
@@ -534,8 +649,7 @@ async function selectInterface(interfaceId) {
   renderInterfacePicker();
   hideInterfaceActionMenu();
   hideInterfaceForm();
-  const file = await getSettingsFile(true);
-  await file.write(JSON.stringify(settings, null, 2));
+  await persistSettings();
   setStatus(`已切换接口：${getCurrentInterface().name}`);
 }
 
@@ -568,8 +682,7 @@ async function saveInterfaceFromForm() {
   applyCurrentInterfaceToFields();
   hideInterfaceForm();
   renderInterfacePicker();
-  const file = await getSettingsFile(true);
-  await file.write(JSON.stringify(settings, null, 2));
+  await persistSettings();
   setStatus(`已保存接口：${item.name}`);
 }
 
@@ -583,8 +696,7 @@ async function deleteCurrentInterface() {
   applyCurrentInterfaceToFields();
   renderInterfacePicker();
   hideInterfaceActionMenu();
-  const file = await getSettingsFile(true);
-  await file.write(JSON.stringify(settings, null, 2));
+  await persistSettings();
   setStatus(`已删除接口：${current.name}`);
 }
 
@@ -720,7 +832,7 @@ async function captureCurrentCanvasReference() {
 
   const activeDocument = app.activeDocument;
   const tempFolder = await storage.localFileSystem.getTemporaryFolder();
-  const file = await tempFolder.createFile(`zhenzhen-reference-${Date.now()}.jpg`, { overwrite: true });
+  const file = await tempFolder.createFile(`liangyi-reference-${Date.now()}.jpg`, { overwrite: true });
 
   await core.executeAsModal(async () => {
     await activeDocument.saveAs.jpg(file, { quality: 10 }, true);
@@ -997,7 +1109,7 @@ function getImageExtension(item) {
 
 function createResultFileName(index, extension) {
   resultFileSequence += 1;
-  return `zhenzhen-result-${Date.now()}-${resultFileSequence}-${index}.${extension}`;
+  return `liangyi-result-${Date.now()}-${resultFileSequence}-${index}.${extension}`;
 }
 
 async function fileFromBase64(item, index, timeoutState) {
@@ -1045,6 +1157,50 @@ async function saveResultFiles(items, timeoutState) {
     }
   }
   return files;
+}
+
+async function createUniqueOutputFile(folder, fileName) {
+  const dotIndex = fileName.lastIndexOf(".");
+  const baseName = dotIndex > 0 ? fileName.slice(0, dotIndex) : fileName;
+  const extension = dotIndex > 0 ? fileName.slice(dotIndex) : "";
+  for (let suffix = 0; suffix < 1000; suffix += 1) {
+    const candidateName = suffix === 0 ? fileName : `${baseName}-${suffix}${extension}`;
+    try {
+      await folder.getEntry(candidateName);
+    } catch (error) {
+      return folder.createFile(candidateName, { overwrite: false });
+    }
+  }
+  throw new Error(`无法为 ${fileName} 创建不重复的文件名。`);
+}
+
+async function savePermanentCopies(files) {
+  if (!settings.outputFolderToken) {
+    return { savedCount: 0, skipped: true, error: null };
+  }
+
+  const folder = outputFolderEntry || await restoreOutputFolder();
+  if (!folder) {
+    return {
+      savedCount: 0,
+      skipped: false,
+      error: new Error("无法访问已设置的图像保存目录，请重新选择目录。")
+    };
+  }
+
+  let savedCount = 0;
+  let firstError = null;
+  for (const sourceFile of files) {
+    try {
+      const bytes = await sourceFile.read({ format: storage.formats.binary });
+      const destinationFile = await createUniqueOutputFile(folder, sourceFile.name);
+      await destinationFile.write(bytes, { format: storage.formats.binary });
+      savedCount += 1;
+    } catch (error) {
+      firstError = firstError || error;
+    }
+  }
+  return { savedCount, skipped: false, error: firstError };
 }
 
 function updateResultButtons(isBusy) {
@@ -1233,10 +1389,7 @@ async function runGenerationFlow(prompt, timeoutState) {
 
   await appendResultFiles(resultFiles);
   assertGenerationNotTimedOut(timeoutState);
-
-  const elapsedSeconds = Math.floor((Date.now() - timeoutState.startedAt) / 1000);
-  setStatus(`完成。已追加 ${resultFiles.length} 张图像，当前共 ${lastResultFiles.length} 张。总用时 ${elapsedSeconds} 秒`);
-  finishGenerationStatus(timeoutState, `完成。已追加 ${resultFiles.length} 张图像，当前共 ${lastResultFiles.length} 张。总用时 ${elapsedSeconds} 秒`);
+  return resultFiles;
 }
 
 async function generate() {
@@ -1248,47 +1401,44 @@ async function generate() {
   activeGenerationCount += 1;
   const timeoutState = startGenerationTimeout(`正在提交图像请求... 当前进行中 ${activeGenerationCount} 个`);
   try {
-    return await Promise.race([
+    const resultFiles = await Promise.race([
       runGenerationFlow(prompt, timeoutState),
       timeoutState.timeoutPromise
     ]);
+
+    clearTimeout(timeoutState.timeoutId);
+    clearInterval(timeoutState.intervalId);
+    let permanentSave = { savedCount: 0, skipped: true, error: null };
+    if (settings.outputFolderToken) {
+      refreshGenerationStatus(timeoutState, "临时预览已就绪，正在保存永久副本...");
+      permanentSave = await savePermanentCopies(resultFiles);
+    }
+
+    const elapsedSeconds = Math.floor((Date.now() - timeoutState.startedAt) / 1000);
+    let message = `完成。已追加 ${resultFiles.length} 张图像，当前共 ${lastResultFiles.length} 张。`;
+    if (!permanentSave.skipped) {
+      message += ` 已保存 ${permanentSave.savedCount}/${resultFiles.length} 张永久副本`;
+      if (settings.outputFolderPath) {
+        message += `到 ${settings.outputFolderPath}`;
+      }
+      message += "。";
+    }
+    if (permanentSave.error) {
+      message += ` 永久副本保存失败：${permanentSave.error.message}`;
+    }
+    message += ` 总用时 ${elapsedSeconds} 秒`;
+    setStatus(message);
+    finishGenerationStatus(timeoutState, message);
+    return resultFiles;
   } catch (error) {
     if (timeoutState.timedOut || isAbortError(error)) {
-      finishGenerationStatus(timeoutState, `已超时（${getGenerationTimeoutSeconds()} 秒），已停止等待`);
+      finishGenerationStatus(timeoutState, `已超时（${getGenerationTimeoutSeconds(timeoutState)} 秒），已停止等待`);
       return;
     }
     finishGenerationStatus(timeoutState, `失败：${error.message}`);
     return;
   } finally {
     stopGenerationTimeout(timeoutState);
-    activeGenerationCount = Math.max(0, activeGenerationCount - 1);
-    updateResultButtons(element("generateButton").disabled);
-  }
-  setStatus(`正在提交图像请求... 当前进行中 ${activeGenerationCount} 个`);
-
-  try {
-    const mode = getPickerValue("modePicker");
-    const submitResult = mode === "img2img"
-      ? await submitImageEdit(prompt)
-      : await submitTextToImage(prompt);
-
-    const taskId = extractTaskId(submitResult);
-    const directImages = extractImageItems(submitResult);
-    if (!directImages.length && !taskId) {
-      throw new Error("接口没有返回图像数据或 task_id。");
-    }
-    const finalResult = directImages.length > 0 ? submitResult : await pollTask(taskId);
-
-    const images = extractImageItems(finalResult);
-    if (!images.length) {
-      throw new Error("接口没有返回图像 URL 或 base64 图像。");
-    }
-
-    setStatus("正在保存生成图像...");
-    const resultFiles = await saveResultFiles(images);
-    await appendResultFiles(resultFiles);
-    setStatus(`完成。已追加 ${resultFiles.length} 张图像，当前共 ${lastResultFiles.length} 张。`);
-  } finally {
     activeGenerationCount = Math.max(0, activeGenerationCount - 1);
     updateResultButtons(element("generateButton").disabled);
   }
@@ -1319,6 +1469,29 @@ function bindEvents() {
 
   element("generateModuleButton").addEventListener("click", () => {
     setActiveModule("generate");
+  });
+
+  element("selectOutputFolderButton").addEventListener("click", async (event) => {
+    event.currentTarget.disabled = true;
+    try {
+      await selectOutputFolder();
+    } catch (error) {
+      setStatus(`无法设置图像保存目录：${error.message}`);
+    } finally {
+      event.currentTarget.disabled = false;
+    }
+  });
+
+  element("saveGenerationSettingsButton").addEventListener("click", async (event) => {
+    event.currentTarget.disabled = true;
+    try {
+      await saveGenerationSettings();
+    } catch (error) {
+      element("generationTimeoutStatus").textContent = `保存失败：${error.message}`;
+      setStatus(`无法保存任务超时时长：${error.message}`);
+    } finally {
+      event.currentTarget.disabled = false;
+    }
   });
 
   const syncInterfacePicker = () => {
@@ -1520,5 +1693,16 @@ async function initAIAssistant() {
   setStatus("就绪。");
 }
 
+window.LiangyiAIConfig = {
+  getCurrent() {
+    const current = getCurrentInterface();
+    return {
+      name: current.name,
+      baseUrl: current.baseUrl,
+      apiKey: current.apiKey,
+      timeoutSeconds: getGenerationTimeoutSeconds()
+    };
+  }
+};
 window.initAIAssistant = initAIAssistant;
 })();

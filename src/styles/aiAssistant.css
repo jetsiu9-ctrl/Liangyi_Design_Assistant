@@ -32,7 +32,9 @@
 .ai-assistant-panel .result-manage-row,
 .ai-assistant-panel .reference-header,
 .ai-assistant-panel .interface-picker-row,
-.ai-assistant-panel .interface-action-menu {
+.ai-assistant-panel .interface-action-menu,
+.ai-assistant-panel .output-folder-row,
+.ai-assistant-panel .generation-timeout-row {
     display: flex;
     flex-direction: row;
     flex-wrap: wrap;
@@ -101,6 +103,48 @@
 
 .ai-assistant-panel .interface-picker-row {
     flex-wrap: nowrap;
+}
+
+.ai-assistant-panel .output-folder-row,
+.ai-assistant-panel .generation-timeout-row {
+    flex-wrap: nowrap;
+    align-items: center;
+}
+
+.ai-assistant-panel .output-folder-row sp-textfield,
+.ai-assistant-panel .generation-timeout-row sp-textfield {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.ai-assistant-panel .output-folder-row sp-button,
+.ai-assistant-panel .generation-timeout-row sp-button {
+    flex: 0 0 auto;
+}
+
+.ai-assistant-panel .ai-setting-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    border: 0;
+}
+
+.ai-assistant-panel .output-folder-section {
+    margin-bottom: 8px;
+}
+
+.ai-assistant-panel .ai-setting-label {
+    display: block;
+    margin: 0;
+}
+
+.ai-assistant-panel .ai-setting-help {
+    display: block;
+    min-height: 16px;
 }
 
 .ai-assistant-panel .interface-picker-row sp-picker {
@@ -313,6 +357,67 @@
     line-height: 1.45;
 }
 
+.ai-assistant-panel .ai-settings-action-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 78px;
+    min-height: 30px;
+    padding: 6px 12px;
+    color: #fff !important;
+    background: var(--surface-strong) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius);
+    font-family: var(--font-ui);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    text-align: center;
+    transition: background-color 0.16s ease, border-color 0.16s ease, opacity 0.16s ease;
+}
+
+.ai-assistant-panel .ai-settings-action-button::part(button) {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 30px;
+    padding: 6px 12px;
+    color: #fff !important;
+    background: var(--surface-strong) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius);
+}
+
+.ai-assistant-panel .ai-settings-action-button sp-label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    color: #fff;
+    text-align: center;
+}
+
+.ai-assistant-panel .ai-settings-action-button:hover:not([disabled]),
+.ai-assistant-panel .ai-settings-action-button:hover:not([disabled])::part(button) {
+    background: var(--accent) !important;
+    border-color: var(--accent) !important;
+}
+
+.ai-assistant-panel .ai-settings-action-button:active:not([disabled]),
+.ai-assistant-panel .ai-settings-action-button:active:not([disabled])::part(button) {
+    background: rgba(61, 125, 231, 0.74) !important;
+    border-color: var(--accent) !important;
+}
+
+.ai-assistant-panel .ai-settings-action-button:not([disabled]) {
+    cursor: pointer;
+}
+
+.ai-assistant-panel .ai-settings-action-button[disabled] {
+    cursor: default;
+    opacity: 0.55;
+}
+
 .ai-assistant-panel .button-row sp-button {
     min-width: 96px;
 }
@@ -326,6 +431,7 @@
 .ai-assistant-panel #saveInterfaceButton,
 .ai-assistant-panel #cancelInterfaceButton,
 .ai-assistant-panel #clearReferencesButton,
+.ai-assistant-panel #imageReverseClearImagesButton,
 .ai-assistant-panel #deleteCurrentResultButton,
 .ai-assistant-panel #clearResultsButton {
     display: flex;
@@ -344,6 +450,7 @@
 .ai-assistant-panel #saveInterfaceButton::part(button),
 .ai-assistant-panel #cancelInterfaceButton::part(button),
 .ai-assistant-panel #clearReferencesButton::part(button),
+.ai-assistant-panel #imageReverseClearImagesButton::part(button),
 .ai-assistant-panel #deleteCurrentResultButton::part(button),
 .ai-assistant-panel #clearResultsButton::part(button) {
     display: flex;
@@ -362,6 +469,7 @@
 .ai-assistant-panel #saveInterfaceButton sp-label,
 .ai-assistant-panel #cancelInterfaceButton sp-label,
 .ai-assistant-panel #clearReferencesButton sp-label,
+.ai-assistant-panel #imageReverseClearImagesButton sp-label,
 .ai-assistant-panel #deleteCurrentResultButton sp-label,
 .ai-assistant-panel #clearResultsButton sp-label {
     display: flex;
@@ -381,6 +489,7 @@
 .ai-assistant-panel #saveInterfaceButton:not([disabled]),
 .ai-assistant-panel #cancelInterfaceButton:not([disabled]),
 .ai-assistant-panel #clearReferencesButton:not([disabled]),
+.ai-assistant-panel #imageReverseClearImagesButton:not([disabled]),
 .ai-assistant-panel #deleteCurrentResultButton:not([disabled]),
 .ai-assistant-panel #clearResultsButton:not([disabled]) {
     cursor: pointer;
@@ -395,6 +504,7 @@
 .ai-assistant-panel #saveInterfaceButton:not([disabled])::part(button),
 .ai-assistant-panel #cancelInterfaceButton:not([disabled])::part(button),
 .ai-assistant-panel #clearReferencesButton:not([disabled])::part(button),
+.ai-assistant-panel #imageReverseClearImagesButton:not([disabled])::part(button),
 .ai-assistant-panel #deleteCurrentResultButton:not([disabled])::part(button),
 .ai-assistant-panel #clearResultsButton:not([disabled])::part(button) {
     cursor: pointer;
@@ -406,6 +516,7 @@
 .ai-assistant-panel #saveInterfaceButton,
 .ai-assistant-panel #cancelInterfaceButton,
 .ai-assistant-panel #clearReferencesButton,
+.ai-assistant-panel #imageReverseClearImagesButton,
 .ai-assistant-panel #deleteCurrentResultButton,
 .ai-assistant-panel #clearResultsButton {
     min-height: 30px;
@@ -427,6 +538,7 @@
 .ai-assistant-panel #saveInterfaceButton::part(button),
 .ai-assistant-panel #cancelInterfaceButton::part(button),
 .ai-assistant-panel #clearReferencesButton::part(button),
+.ai-assistant-panel #imageReverseClearImagesButton::part(button),
 .ai-assistant-panel #deleteCurrentResultButton::part(button),
 .ai-assistant-panel #clearResultsButton::part(button) {
     min-height: 30px;
@@ -494,6 +606,8 @@
 
 .ai-assistant-panel #clearReferencesButton:hover:not([disabled]),
 .ai-assistant-panel #clearReferencesButton:focus:not([disabled]),
+.ai-assistant-panel #imageReverseClearImagesButton:hover:not([disabled]),
+.ai-assistant-panel #imageReverseClearImagesButton:focus:not([disabled]),
 .ai-assistant-panel #clearResultsButton:hover:not([disabled]),
 .ai-assistant-panel #clearResultsButton:focus:not([disabled]) {
     color: #fff !important;
@@ -503,6 +617,7 @@
 }
 
 .ai-assistant-panel #clearReferencesButton:active:not([disabled]),
+.ai-assistant-panel #imageReverseClearImagesButton:active:not([disabled]),
 .ai-assistant-panel #clearResultsButton:active:not([disabled]) {
     color: #fff !important;
     background: var(--danger) !important;
@@ -514,6 +629,7 @@
 .ai-assistant-panel #exportCurrentButton[disabled],
 .ai-assistant-panel #exportAllButton[disabled],
 .ai-assistant-panel #clearReferencesButton[disabled],
+.ai-assistant-panel #imageReverseClearImagesButton[disabled],
 .ai-assistant-panel #clearResultsButton[disabled] {
     cursor: default;
 }

@@ -344,6 +344,21 @@
         return parseFloat(value) || 0;
     }
 
+    function getLayerFontSize(layer) {
+        try {
+            const fontSize = getUnitValue(layer.textItem?.characterStyle?.size);
+            return fontSize > 0 ? fontSize : null;
+        } catch (e) {
+            console.warn('[TranslateModule] 读取文字图层字号失败:', layer?.name, e);
+            return null;
+        }
+    }
+
+    function restoreLayerFontSize(layer, fontSize) {
+        if (!fontSize) return;
+        layer.textItem.characterStyle.size = fontSize;
+    }
+
     function getLayerHeight(layer) {
         try {
             const bounds = layer.bounds;
@@ -439,6 +454,7 @@
 
         duplicateLayer.name = `${sourceLayer.name || '文字'} 翻译`;
         duplicateLayer.textItem.contents = item.translatedText;
+        restoreLayerFontSize(duplicateLayer, item.fontSize);
         await offsetActiveLayer(action, verticalOffset);
         await moveActiveLayerDown(action);
     }
@@ -465,8 +481,9 @@
             const sourceText = layer.textItem?.contents || '';
             if (!sourceText.trim()) continue;
 
+            const fontSize = getLayerFontSize(layer);
             const result = await translateText(sourceText, currentSettings);
-            translatedItems.push({ layer, sourceText, translatedText: result.translated });
+            translatedItems.push({ layer, sourceText, translatedText: result.translated, fontSize });
         }
 
         if (translatedItems.length === 0) {
@@ -481,6 +498,7 @@
                         await createAttachedTranslationLayer(item, photoshop);
                     } else {
                         item.layer.textItem.contents = item.translatedText;
+                        restoreLayerFontSize(item.layer, item.fontSize);
                     }
                     updatedCount++;
                 } catch (e) {

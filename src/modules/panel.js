@@ -747,7 +747,7 @@
             return;
         }
 
-        if (panelType === 'aiGenerate' || panelType === 'aiSettings') {
+        if (panelType === 'aiGenerate' || panelType === 'imageReverse' || panelType === 'aiSettings') {
             return;
         }
 

@@ -60,6 +60,9 @@ function getMainPanelHTML() {
                     <div class="nav-icon" data-panel="aiGenerate" data-no-quick-action="true" title="图像生成">
                         <sp-label class="nav-icon-text">🎨</sp-label>
                     </div>
+                    <div class="nav-icon" data-panel="imageReverse" data-no-quick-action="true" title="图像反推">
+                        <sp-label class="nav-icon-text">✍️</sp-label>
+                    </div>
                     <div class="nav-icon" data-panel="aiSettings" data-no-quick-action="true" title="连接设置">
                         <sp-label class="nav-icon-text">⚙️</sp-label>
                     </div>
@@ -83,7 +86,7 @@ function getMainPanelHTML() {
                         </div>
                         <div class="feature-item" data-goto="button">
                             <div class="feature-icon">
-                                <span class="feature-icon-text">🎨</span>
+                                <span class="feature-icon-text">🪄</span>
                             </div>
                             <div class="feature-info">
                                 <span class="feature-name">生成按钮</span>
@@ -142,6 +145,15 @@ function getMainPanelHTML() {
                             <div class="feature-info">
                                 <sp-label class="feature-name">图像生成</sp-label>
                                 <sp-body class="feature-desc" size="S">使用 AI 生成或编辑图像</sp-body>
+                            </div>
+                        </div>
+                        <div class="feature-item" data-goto="imageReverse">
+                            <div class="feature-icon">
+                                <sp-label class="feature-icon-text">✍️</sp-label>
+                            </div>
+                            <div class="feature-info">
+                                <sp-label class="feature-name">图像反推</sp-label>
+                                <sp-body class="feature-desc" size="S">从参考图提取结构化提示词</sp-body>
                             </div>
                         </div>
                         <div class="feature-item" data-goto="aiSettings">
@@ -759,9 +771,138 @@ function getMainPanelHTML() {
                     </section>
                 </div>
 
+                <div id="imageReversePanel" class="panel-content ai-assistant-panel image-reverse-panel">
+                    <section class="ai-module-panel">
+                        <sp-heading size="S">图像反推</sp-heading>
+
+                        <section class="reference-section image-reverse-card">
+                            <section class="image-reverse-section-header">
+                                <sp-label>参考图</sp-label>
+                                <sp-body id="imageReverseImageCount" size="S">0/8</sp-body>
+                            </section>
+                            <sp-body class="info-text" size="S">点击“+”添加当前 Photoshop 画布；不添加参考图也可以发送请求。</sp-body>
+                            <section id="imageReverseImageList" class="reference-list"></section>
+                            <section class="button-row image-reverse-upload-actions">
+                                <sp-button id="imageReverseClearImagesButton" variant="secondary" disabled>
+                                    <sp-label>清空</sp-label>
+                                </sp-button>
+                            </section>
+                        </section>
+
+                        <section class="field-row">
+                            <section class="field">
+                                <sp-label for="imageReverseProviderPicker">接口类型</sp-label>
+                                <sp-picker id="imageReverseProviderPicker">
+                                    <sp-menu slot="options">
+                                        <sp-menu-item value="openai">OpenAI</sp-menu-item>
+                                        <sp-menu-item value="gemini" selected>Gemini</sp-menu-item>
+                                    </sp-menu>
+                                </sp-picker>
+                            </section>
+                            <section class="field">
+                                <sp-label for="imageReversePresetPicker">提示词预设</sp-label>
+                                <sp-picker id="imageReversePresetPicker">
+                                    <sp-menu slot="options">
+                                        <sp-menu-item value="reverse" selected>反推</sp-menu-item>
+                                        <sp-menu-item value="edit">编辑</sp-menu-item>
+                                        <sp-menu-item value="none">不使用预设</sp-menu-item>
+                                    </sp-menu>
+                                </sp-picker>
+                            </section>
+                        </section>
+
+                        <section class="field-row">
+                            <section class="field">
+                                <sp-label for="imageReverseModelPicker">模型</sp-label>
+                                <sp-picker id="imageReverseModelPicker">
+                                    <sp-menu id="imageReverseModelPickerMenu" slot="options">
+                                        <sp-menu-item value="gemini-3.5-flash" selected>gemini-3.5-flash</sp-menu-item>
+                                        <sp-menu-item value="gemini-3.6-flash">gemini-3.6-flash</sp-menu-item>
+                                        <sp-menu-item value="custom">使用自定义模型</sp-menu-item>
+                                    </sp-menu>
+                                </sp-picker>
+                            </section>
+                        </section>
+
+                        <section class="field-row">
+                            <section class="field">
+                                <sp-label for="imageReverseCustomModelInput">自定义模型</sp-label>
+                                <sp-textfield id="imageReverseCustomModelInput"></sp-textfield>
+                            </section>
+                        </section>
+
+                        <section class="field image-reverse-prompt-field">
+                            <sp-label for="imageReversePromptInput">提示词</sp-label>
+                            <sp-textarea id="imageReversePromptInput" rows="5"></sp-textarea>
+                        </section>
+
+                        <section class="button-row image-reverse-submit-row">
+                            <sp-button id="imageReverseStartButton" variant="accent">
+                                <sp-label>开始反推</sp-label>
+                            </sp-button>
+                        </section>
+
+                        <section class="status-block">
+                            <sp-heading size="S">状态</sp-heading>
+                            <sp-body id="imageReverseStatusText" size="S">就绪。</sp-body>
+                        </section>
+
+                        <section id="imageReverseResultSection" class="result-preview-section image-reverse-result-section is-hidden">
+                            <sp-heading size="S">文本结果</sp-heading>
+                            <sp-textarea id="imageReverseResultText" class="image-reverse-result-text" readonly></sp-textarea>
+                            <section class="image-reverse-result-pager">
+                                <sp-action-button id="imageReversePrevResultButton" quiet disabled title="上一条">
+                                    <svg class="image-reverse-pager-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path fill="currentColor" d="M15.5 5 8.5 12l7 7V5z"/>
+                                    </svg>
+                                </sp-action-button>
+                                <sp-body id="imageReverseResultPageText" size="S">1/1</sp-body>
+                                <sp-action-button id="imageReverseNextResultButton" quiet disabled title="下一条">
+                                    <svg class="image-reverse-pager-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path fill="currentColor" d="m8.5 5 7 7-7 7V5z"/>
+                                    </svg>
+                                </sp-action-button>
+                            </section>
+                            <section class="result-manage-row image-reverse-result-actions">
+                                <sp-button id="imageReverseCopyButton" variant="secondary" disabled>
+                                    <sp-label>复制当前</sp-label>
+                                </sp-button>
+                                <sp-button id="imageReverseDeleteResultButton" variant="secondary" disabled>
+                                    <sp-label>删除当前</sp-label>
+                                </sp-button>
+                                <sp-button id="imageReverseClearResultButton" variant="secondary" disabled>
+                                    <sp-label>清空全部</sp-label>
+                                </sp-button>
+                            </section>
+                        </section>
+                    </section>
+                </div>
+
                 <div id="aiSettingsPanel" class="panel-content ai-assistant-panel">
                     <section id="connectionModule" class="ai-module-panel">
                         <sp-heading size="S">连接设置</sp-heading>
+
+                        <section class="ai-setting-group output-folder-section">
+                            <sp-label class="ai-setting-label" for="outputFolderPath">生成图像保存目录</sp-label>
+                            <section class="output-folder-row">
+                                <sp-textfield id="outputFolderPath" readonly placeholder="尚未选择保存目录"></sp-textfield>
+                                <sp-button id="selectOutputFolderButton" class="ai-settings-action-button" variant="secondary">
+                                    <sp-label>选择目录</sp-label>
+                                </sp-button>
+                            </section>
+                            <sp-body class="info-text ai-setting-help" size="S">生成结果仍保留临时预览，并额外保存一份到所选目录。</sp-body>
+                        </section>
+
+                        <section class="ai-setting-group generation-settings-section">
+                            <sp-label class="ai-setting-label" for="generationTimeoutInput">任务超时时长（秒）</sp-label>
+                            <section class="generation-timeout-row">
+                                <sp-textfield id="generationTimeoutInput" type="number" min="1" max="2147483" value="300"></sp-textfield>
+                                <sp-button id="saveGenerationSettingsButton" class="ai-settings-action-button" variant="secondary">
+                                    <sp-label>保存</sp-label>
+                                </sp-button>
+                            </section>
+                            <sp-body id="generationTimeoutStatus" class="info-text ai-setting-help" size="S">保存后将用于后续启动的生图任务。</sp-body>
+                        </section>
 
                         <sp-label for="interfacePicker">当前接口</sp-label>
                         <section id="interfacePickerRow" class="interface-picker-row">
@@ -887,6 +1028,7 @@ entrypoints.setup({
                 loadCSS('src/styles/main.css');
                 loadCSS('src/styles/quick.css');
                 loadCSS('src/styles/aiAssistant.css');
+                loadCSS('src/styles/imageReverse.css');
                 rootNode.innerHTML = getMainPanelHTML();
                 return Promise.all([
                     loadScript('src/modules/quickStorage.js'),
@@ -900,6 +1042,7 @@ entrypoints.setup({
                     loadScript('src/modules/translateModule.js'),
                     loadScript('src/modules/guidesModule.js'),
                     loadScript('src/modules/aiAssistantModule.js'),
+                    loadScript('src/modules/imageReverseModule.js'),
                     loadScript('src/modules/panel.js')
                 ]).then(async () => {
                     if (typeof window.initPanel === 'function') {
@@ -909,6 +1052,10 @@ entrypoints.setup({
                     if (typeof window.initAIAssistant === 'function') {
                         await window.initAIAssistant(rootNode);
                         console.log('[HaimatiPanel] AI 助手模块初始化完成');
+                    }
+                    if (typeof window.initImageReverse === 'function') {
+                        await window.initImageReverse(rootNode);
+                        console.log('[HaimatiPanel] 图像反推模块初始化完成');
                     }
                 });
             },

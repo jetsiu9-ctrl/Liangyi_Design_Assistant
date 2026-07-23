@@ -1,8 +1,8 @@
 # Liangyi Design Assistant / 凉意设计助手
 
-凉意设计助手是一个面向 Adobe Photoshop 的 UXP 插件，集合了设计交付中常用的图层导出、按钮生成、批量重命名、文档优化、字体管理、翻译、参考线、颜色面板与 AI 图像生成等工具。
+凉意设计助手是一个面向 Adobe Photoshop 的 UXP 插件，集合了设计交付中常用的图层导出、按钮生成、批量重命名、文档优化、字体管理、翻译、参考线、颜色面板、AI 图像生成与图像反推等工具。
 
-Liangyi Design Assistant is an Adobe Photoshop UXP plugin that brings together common production tools for layer export, button generation, batch renaming, document cleanup, font management, translation, guide creation, color handling, and AI image generation.
+Liangyi Design Assistant is an Adobe Photoshop UXP plugin that brings together common production tools for layer export, button generation, batch renaming, document cleanup, font management, translation, guide creation, color handling, AI image generation, and image-to-prompt analysis.
 
 ## 功能概览 / Features
 
@@ -18,6 +18,7 @@ Liangyi Design Assistant is an Adobe Photoshop UXP plugin that brings together c
 | 快捷操作面板：在主面板中通过 Ctrl+点击功能图标创建常用操作快捷方式。 | Quick Access Panel: create reusable shortcuts from the main panel by Ctrl-clicking feature icons. |
 | 颜色面板：管理前景色、手动颜色、图层填充/描边颜色以及颜色交换。 | Color Panel: manages foreground colors, manual swatches, layer fill/stroke colors, and color swapping. |
 | AI 图像生成：配置接口后提交图像生成请求、预览结果、导出或置入 Photoshop 文档。 | AI Image Generation: submits generation requests after API configuration, previews results, exports them, or places them into Photoshop documents. |
+| 图像反推：通过 OpenAI 或 Gemini 接口分析当前 Photoshop 画布，使用反推/编辑预设生成可复制的结构化文本结果。 | Image Reverse: analyzes the current Photoshop canvas through OpenAI or Gemini and produces copyable structured text with reverse/edit presets. |
 
 ## 环境要求 / Requirements
 
@@ -27,7 +28,7 @@ Liangyi Design Assistant is an Adobe Photoshop UXP plugin that brings together c
 - Adobe UXP Developer Tool，用于本地加载和调试插件。
 - Photoshop 需要先启动并连接到 UXP Developer Tool。
 - 如需使用网络功能，需要允许插件访问网络；manifest 当前配置为 `network.domains: "all"`。
-- 如需使用百度翻译或 AI 生成功能，需要自行准备对应服务的密钥或接口配置。
+- 如需使用百度翻译、AI 图像生成或图像反推功能，需要自行准备对应服务的密钥或接口配置。
 
 English:
 
@@ -35,7 +36,7 @@ English:
 - Adobe UXP Developer Tool for local loading and debugging.
 - Photoshop must be running and connected to UXP Developer Tool before loading the plugin.
 - Network permission is required for online features. The current manifest uses `network.domains: "all"`.
-- Baidu Translate and AI generation require your own service credentials or endpoint configuration.
+- Baidu Translate, AI generation, and image reverse require your own service credentials or endpoint configuration.
 
 ## 安装与加载 / Installation & Loading
 
@@ -89,6 +90,12 @@ For development and debugging:
 - 字体管理会使用 Photoshop 当前可用字体集合。
 - 百度翻译需要先填写并保存百度翻译开放平台的 APP ID 与 API KEY。
 - AI 图像生成需要先在连接设置中配置接口地址、密钥、模型等参数。
+- 可在 AI 连接设置中选择生成图像保存目录；生成结果保留临时预览的同时，会额外保存一份永久副本。
+- AI 连接设置支持自定义任务超时时长；保存目录、接口和超时设置会保存在 `liangyi-ai-settings.json` 中。
+- 图像反推支持 OpenAI/Gemini 请求格式、接口联动模型预设、自定义模型，以及“反推 / 编辑 / 不使用预设”三种提示词模式。
+- 图像反推参考图通过“+”抓取当前 Photoshop 画布；参考图不是必填项，可连续提交多个独立请求。
+- 每个反推请求都会在状态区域实时显示已用时间和超时上限；文本结果可在插件内查看并复制。
+- 同一次插件会话中的反推结果会按完成顺序保留，可使用上一条/下一条切换，并支持复制当前、删除当前和清空全部。
 
 English:
 
@@ -100,18 +107,24 @@ English:
 - Font Management uses the font list currently available to Photoshop.
 - Baidu Translate requires saving your Baidu Translate APP ID and API KEY first.
 - AI Image Generation requires endpoint, key, model, and related settings in the connection panel.
+- Choose an image output folder in the AI connection settings to keep a permanent copy while retaining the temporary preview workflow.
+- AI connection settings include a persistent task timeout. Output folder, endpoint, and timeout preferences are stored in `liangyi-ai-settings.json`.
+- Image Reverse supports OpenAI/Gemini request formats, provider-specific model presets, custom models, and Reverse/Edit/No Preset prompt modes.
+- Use the “+” tile to capture the current Photoshop canvas as a reference. A reference is optional, and multiple independent requests can run concurrently.
+- Each reverse request reports elapsed time and its timeout limit in the status area. Returned text can be reviewed and copied inside the plugin.
+- Reverse results are retained in completion order for the current plugin session, with Previous/Next navigation plus Copy Current, Delete Current, and Clear All actions.
 
 ## 面板说明 / Panels
 
 中文：
 
-- `HaimatiPanel`：主功能面板，包含导出、按钮、重命名、优化、字体、翻译、参考线、AI 等模块。
+- `HaimatiPanel`：主功能面板，包含导出、按钮、重命名、优化、字体、翻译、参考线、AI 图像生成、图像反推和连接设置等模块。
 - `QuickAccessPanel`：快捷操作面板，用于执行已保存的常用操作。
 - `ColorPanel`：颜色面板，用于快速应用、保存、移除和交换颜色。
 
 English:
 
-- `HaimatiPanel`: the main panel containing export, button generation, rename, optimization, font, translation, guides, and AI modules.
+- `HaimatiPanel`: the main panel containing export, button generation, rename, optimization, font, translation, guides, AI generation, image reverse, and connection settings.
 - `QuickAccessPanel`: a quick-action panel for running saved workflows.
 - `ColorPanel`: a color utility panel for applying, saving, removing, and swapping colors.
 
@@ -125,6 +138,7 @@ Liangyi_Design_Assistant-1.0.4/
 └─ src/
    ├─ modules/
    │  ├─ aiAssistantModule.js
+   │  ├─ imageReverseModule.js
    │  ├─ buttonModule.js
    │  ├─ colorPanel.js
    │  ├─ colorPanelRuntime.js
@@ -137,8 +151,12 @@ Liangyi_Design_Assistant-1.0.4/
    │  ├─ renameModule.js
    │  ├─ smartObjectModule.js
    │  └─ translateModule.js
+   ├─ prompts/
+   │  ├─ image-edit-preset.txt
+   │  └─ image-reverse-preset.txt
    └─ styles/
       ├─ aiAssistant.css
+      ├─ imageReverse.css
       ├─ colorPanel.css
       ├─ main.css
       └─ quick.css
@@ -200,25 +218,25 @@ English:
 
 Check that the plugin is marked as `Loaded`, then open the Design Assistant, Quick Access, or Color Panel from the Photoshop plugin menu. Click `Reload` if needed.
 
-### 翻译或 AI 功能不可用 / Translation or AI generation does not work
+### 翻译或 AI 功能不可用 / Translation or AI features do not work
 
 中文：
 
-请确认网络权限、接口地址、密钥和服务账号状态。百度翻译需要有效的 APP ID 与 API KEY。
+请确认网络权限、接口地址、密钥、模型名称和服务账号状态。百度翻译需要有效的 APP ID 与 API KEY。图像反推还需要选择与接口请求格式匹配的 OpenAI 或 Gemini 类型。
 
 English:
 
-Check network permission, endpoint URL, API key, and service account status. Baidu Translate requires a valid APP ID and API KEY.
+Check network permission, endpoint URL, API key, model name, and service account status. Baidu Translate requires a valid APP ID and API KEY. Image Reverse also requires selecting the OpenAI or Gemini request format supported by the endpoint.
 
 ## 权限说明 / Permissions
 
 中文：
 
-manifest 当前声明了文档读写、图层读写、图层复制、本地文件系统、网络和插件通信权限。这些权限用于导出文件、保存配置、读取/修改图层、访问翻译或 AI 接口。
+manifest 当前声明了文档读写、图层读写、图层复制、本地文件系统、网络、剪贴板和插件通信权限。这些权限用于导出文件、保存配置、读取/修改图层、访问翻译或 AI 接口，以及复制图像反推文本结果。
 
 English:
 
-The current manifest declares permissions for document read/write, layer read/write, layer copy, local file system access, network access, and plugin communication. These permissions support file export, settings storage, layer operations, and translation/AI requests.
+The current manifest declares permissions for document read/write, layer read/write, layer copy, local file system access, network access, clipboard access, and plugin communication. These permissions support file export, settings storage, layer operations, translation/AI requests, and copying Image Reverse results.
 
 ## 版本信息 / Version
 

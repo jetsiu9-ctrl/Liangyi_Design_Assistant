@@ -1,0 +1,188 @@
+.image-reverse-panel .ai-module-panel {
+    gap: 16px;
+}
+
+.image-reverse-panel .image-reverse-card,
+.image-reverse-panel .image-reverse-result-section {
+    gap: 10px;
+    padding: 10px;
+}
+
+.image-reverse-panel .image-reverse-result-section {
+    gap: 6px;
+    padding: 8px;
+}
+
+.image-reverse-panel .image-reverse-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+}
+
+.image-reverse-panel .image-reverse-image-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    width: 100%;
+}
+
+.image-reverse-panel .image-reverse-image-list:empty {
+    display: none;
+}
+
+.image-reverse-panel .image-reverse-image-item {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.18);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+}
+
+.image-reverse-panel .image-reverse-image-preview {
+    display: block;
+    width: 100%;
+    height: 96px;
+    object-fit: cover;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.image-reverse-panel .image-reverse-image-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    padding: 6px 30px 6px 7px;
+}
+
+.image-reverse-panel .image-reverse-image-role,
+.image-reverse-panel .image-reverse-image-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.image-reverse-panel .image-reverse-image-role {
+    color: var(--text);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.image-reverse-panel .image-reverse-image-name {
+    color: var(--text-muted);
+    font-size: 10px;
+}
+
+.image-reverse-panel .image-reverse-remove-image {
+    position: absolute;
+    right: 4px;
+    bottom: 5px;
+    width: 24px;
+    min-width: 24px;
+    height: 24px;
+    min-height: 24px;
+    padding: 0;
+}
+
+.image-reverse-panel .image-reverse-upload-actions,
+.image-reverse-panel .image-reverse-submit-row {
+    flex-wrap: nowrap;
+}
+
+.image-reverse-panel .image-reverse-prompt-field {
+    flex: 0 0 auto;
+    gap: 8px;
+    width: 100%;
+}
+
+.image-reverse-panel .image-reverse-submit-row {
+    margin: 2px 0 6px;
+}
+
+.image-reverse-panel #imageReverseStartButton {
+    width: 100%;
+}
+
+.image-reverse-panel #imageReverseStatusText {
+    white-space: pre-line;
+}
+
+.image-reverse-panel .image-reverse-result-actions {
+    flex-wrap: nowrap;
+    margin-top: 0;
+}
+
+.image-reverse-panel .image-reverse-result-pager {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 28px;
+}
+
+.image-reverse-panel .image-reverse-result-pager sp-action-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    min-width: 28px;
+    height: 28px;
+    min-height: 28px;
+    padding: 0;
+}
+
+.image-reverse-panel .image-reverse-result-pager sp-action-button::part(button) {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    min-width: 28px;
+    height: 28px;
+    min-height: 28px;
+    padding: 0;
+}
+
+.image-reverse-panel .image-reverse-pager-icon {
+    display: block;
+    flex: 0 0 14px;
+    width: 14px;
+    height: 14px;
+    margin: 0;
+}
+
+.image-reverse-panel .image-reverse-result-pager sp-body {
+    min-width: 42px;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.image-reverse-panel .image-reverse-result-actions sp-button {
+    flex: 1 1 0;
+    min-width: 96px;
+}
+
+.image-reverse-panel .image-reverse-result-section > sp-heading {
+    display: block;
+    width: 100%;
+    white-space: nowrap;
+}
+
+.image-reverse-panel .image-reverse-result-text {
+    width: 100%;
+    height: 200px;
+    min-height: 200px;
+    max-height: 200px;
+    margin: 0;
+    font-family: "Courier New", monospace;
+    line-height: 1.45;
+}
+
+.image-reverse-panel .info-text {
+    color: var(--text-muted);
+    line-height: 1.45;
+}
