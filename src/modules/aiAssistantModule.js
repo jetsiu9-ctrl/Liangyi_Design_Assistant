@@ -57,6 +57,7 @@ let settings = {
 let editingInterfaceId = "";
 let outputFolderEntry = null;
 let lastResultFiles = [];
+let lastResultLinks = [];
 let currentResultIndex = 0;
 let currentPreviewUrl = "";
 let referenceImages = [];
@@ -961,8 +962,8 @@ function renderReferences() {
 }
 
 function updateModeUi() {
-  const isEditMode = getPickerValue("modePicker") === "img2img";
-  element("referenceSection").classList.toggle("is-hidden", !isEditMode);
+  // Reference images are optional in both text-to-image and image-edit modes.
+  element("referenceSection").classList.remove("is-hidden");
 }
 
 function countPromptLineUnits(line) {
@@ -993,15 +994,32 @@ function bindPromptAutoRows() {
 }
 
 async function submitTextToImage(prompt, timeoutState) {
-  const payload = appendCommonJsonPayload({ prompt });
-  refreshGenerationStatus(timeoutState, `正在提交生成请求：模型 ${payload.model}，尺寸 ${payload.size}`);
-  setStatus(`正在提交生成请求：模型 ${payload.model}，尺寸 ${payload.size}`);
-
-  if (isGeminiImageModel(payload.model)) {
-    return submitGeminiImages(prompt, [], timeoutState);
+  const model = getModelValue();
+  if (isGeminiImageModel(model)) {
+    refreshGenerationStatus(timeoutState, `正在提交生成请求：模型 ${model}，尺寸 ${getGeminiImageSize()}`);
+    setStatus(`正在提交生成请求：模型 ${model}，尺寸 ${getGeminiImageSize()}`);
+    return submitGeminiImages(prompt, referenceImages, timeoutState);
   }
 
+  refreshGenerationStatus(timeoutState, `正在提交生成请求：模型 ${model}，尺寸 ${getActualSize()}`);
+  setStatus(`正在提交生成请求：模型 ${model}，尺寸 ${getActualSize()}`);
+
   const useAsync = Boolean(element("asyncCheckbox").checked);
+  if (referenceImages.length) {
+    const form = new FormData();
+    form.append("prompt", prompt);
+    appendCommonFormFields(form);
+    referenceImages.forEach((item, index) => {
+      form.append("image", new Blob([item.bytes], { type: "image/jpeg" }), `reference_${index + 1}.jpg`);
+    });
+    return requestJson(apiUrl("/v1/images/generations", useAsync ? { async: "true" } : {}), {
+      method: "POST",
+      headers: requestHeaders(),
+      body: form
+    }, timeoutState);
+  }
+
+  const payload = appendCommonJsonPayload({ prompt });
   return requestJson(apiUrl("/v1/images/generations", useAsync ? { async: "true" } : {}), {
     method: "POST",
     headers: requestHeaders("application/json"),
@@ -1147,16 +1165,26 @@ async function fileFromUrl(item, index, timeoutState) {
 
 async function saveResultFiles(items, timeoutState) {
   const files = [];
+  const fallbackUrls = [];
+  let firstError = null;
   for (let index = 0; index < items.length; index += 1) {
     assertGenerationNotTimedOut(timeoutState);
     const item = items[index];
-    if (item.b64_json) {
-      files.push(await fileFromBase64(item, index, timeoutState));
-    } else if (item.url) {
-      files.push(await fileFromUrl(item, index, timeoutState));
+    try {
+      if (item.b64_json) {
+        files.push(await fileFromBase64(item, index, timeoutState));
+      } else if (item.url) {
+        files.push(await fileFromUrl(item, index, timeoutState));
+      }
+    } catch (error) {
+      assertGenerationNotTimedOut(timeoutState);
+      firstError = firstError || error;
+      if (item.url) {
+        fallbackUrls.push(String(item.url));
+      }
     }
   }
-  return files;
+  return { files, fallbackUrls, firstError };
 }
 
 async function createUniqueOutputFile(folder, fileName) {
@@ -1209,7 +1237,7 @@ function updateResultButtons(isBusy) {
   element("exportCurrentButton").disabled = isBusy || !hasResults;
   element("exportAllButton").disabled = isBusy || !hasResults;
   element("deleteCurrentResultButton").disabled = isBusy || !hasResults;
-  element("clearResultsButton").disabled = isBusy || !hasResults;
+  element("clearResultsButton").disabled = isBusy || (!hasResults && !lastResultLinks.length);
   element("resultPager").classList.toggle("is-hidden", !hasMultipleResults);
   element("prevResultButton").disabled = isBusy || !hasMultipleResults || currentResultIndex <= 0;
   element("nextResultButton").disabled = isBusy || !hasMultipleResults || currentResultIndex >= lastResultFiles.length - 1;
@@ -1225,6 +1253,27 @@ function clearResultPreview() {
   element("previewImage").removeAttribute("src");
   element("resultPreviewSection").classList.add("is-hidden");
   element("resultPageText").textContent = "1/1";
+  updateResultButtons(element("generateButton").disabled);
+}
+
+function renderResultLinks() {
+  const section = element("resultLinkSection");
+  const output = element("resultImageLinksText");
+  if (!section || !output) {
+    return;
+  }
+  output.value = lastResultLinks.join("\n");
+  section.classList.toggle("is-hidden", lastResultLinks.length === 0);
+}
+
+function appendResultLinks(urls) {
+  urls.forEach((url) => {
+    const normalizedUrl = String(url || "").trim();
+    if (normalizedUrl && !lastResultLinks.includes(normalizedUrl)) {
+      lastResultLinks.push(normalizedUrl);
+    }
+  });
+  renderResultLinks();
   updateResultButtons(element("generateButton").disabled);
 }
 
@@ -1273,12 +1322,11 @@ async function deleteCurrentResult() {
 }
 
 async function clearAllResults() {
-  if (!lastResultFiles.length) {
-    clearResultPreview();
-    return;
-  }
   const files = lastResultFiles.slice();
   clearResultPreview();
+  lastResultLinks = [];
+  renderResultLinks();
+  updateResultButtons(element("generateButton").disabled);
   for (const file of files) {
     await deleteResultFile(file);
   }
@@ -1384,12 +1432,16 @@ async function runGenerationFlow(prompt, timeoutState) {
   }
 
   refreshGenerationStatus(timeoutState, "正在保存生成图像...");
-  const resultFiles = await saveResultFiles(images, timeoutState);
+  const savedResults = await saveResultFiles(images, timeoutState);
   assertGenerationNotTimedOut(timeoutState);
 
-  await appendResultFiles(resultFiles);
+  if (!savedResults.files.length && !savedResults.fallbackUrls.length) {
+    throw savedResults.firstError || new Error("生成图像无法保存到临时目录。");
+  }
+  appendResultLinks(savedResults.fallbackUrls);
+  await appendResultFiles(savedResults.files);
   assertGenerationNotTimedOut(timeoutState);
-  return resultFiles;
+  return savedResults;
 }
 
 async function generate() {
@@ -1401,21 +1453,27 @@ async function generate() {
   activeGenerationCount += 1;
   const timeoutState = startGenerationTimeout(`正在提交图像请求... 当前进行中 ${activeGenerationCount} 个`);
   try {
-    const resultFiles = await Promise.race([
+    const generationResult = await Promise.race([
       runGenerationFlow(prompt, timeoutState),
       timeoutState.timeoutPromise
     ]);
+    const resultFiles = generationResult.files;
 
     clearTimeout(timeoutState.timeoutId);
     clearInterval(timeoutState.intervalId);
     let permanentSave = { savedCount: 0, skipped: true, error: null };
-    if (settings.outputFolderToken) {
+    if (settings.outputFolderToken && resultFiles.length) {
       refreshGenerationStatus(timeoutState, "临时预览已就绪，正在保存永久副本...");
       permanentSave = await savePermanentCopies(resultFiles);
     }
 
     const elapsedSeconds = Math.floor((Date.now() - timeoutState.startedAt) / 1000);
-    let message = `完成。已追加 ${resultFiles.length} 张图像，当前共 ${lastResultFiles.length} 张。`;
+    let message = resultFiles.length
+      ? `完成。已追加 ${resultFiles.length} 张图像，当前共 ${lastResultFiles.length} 张。`
+      : `完成。${generationResult.fallbackUrls.length} 张图像下载失败，已显示结果链接。`;
+    if (resultFiles.length && generationResult.fallbackUrls.length) {
+      message += ` ${generationResult.fallbackUrls.length} 张图像下载失败，已显示结果链接。`;
+    }
     if (!permanentSave.skipped) {
       message += ` 已保存 ${permanentSave.savedCount}/${resultFiles.length} 张永久副本`;
       if (settings.outputFolderPath) {

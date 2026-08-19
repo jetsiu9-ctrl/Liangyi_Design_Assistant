@@ -53,6 +53,7 @@
 
 .ai-assistant-panel .check-row,
 .ai-assistant-panel .result-preview-section,
+.ai-assistant-panel .result-link-section,
 .ai-assistant-panel .reference-section,
 .ai-assistant-panel .status-block,
 .ai-assistant-panel .interface-action-menu,
@@ -191,6 +192,16 @@
     height: 100%;
     object-fit: contain;
     background: rgba(255, 255, 255, 0.05);
+}
+
+.ai-assistant-panel .result-image-links-text {
+    width: 100%;
+    height: 96px;
+    min-height: 96px;
+    max-height: 160px;
+    margin: 0;
+    font-family: "Courier New", monospace;
+    line-height: 1.45;
 }
 
 .ai-assistant-panel .result-controls {

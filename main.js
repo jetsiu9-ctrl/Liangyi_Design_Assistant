@@ -653,11 +653,17 @@ function getMainPanelHTML() {
                             </section>
                         </section>
 
+                        <section id="resultLinkSection" class="result-preview-section result-link-section is-hidden">
+                            <sp-heading size="S">结果图像链接</sp-heading>
+                            <sp-textarea id="resultImageLinksText" class="result-image-links-text" readonly rows="4"></sp-textarea>
+                        </section>
+
                         <section id="referenceSection" class="reference-section is-hidden">
                             <section class="reference-header">
                                 <sp-label>参考图</sp-label>
                                 <sp-body id="referenceCountText" size="S">0/8</sp-body>
                             </section>
+                            <sp-body class="info-text">点击“+”添加当前 Photoshop 画布；不添加参考图也可以发送请求。</sp-body>
                             <section id="referenceList" class="reference-list"></section>
                             <section class="button-row">
                                 <sp-button id="clearReferencesButton" variant="secondary">
