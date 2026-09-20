@@ -89,10 +89,11 @@ For development and debugging:
 - 批量重命名前，请先选中需要处理的图层，并检查预览结果。
 - 字体管理会使用 Photoshop 当前可用字体集合。
 - 百度翻译需要先填写并保存百度翻译开放平台的 APP ID 与 API KEY。
-- AI 图像生成需要先在连接设置中配置接口地址、密钥、模型等参数。
+- AI 图像生成需要先在连接设置中配置接口地址和密钥。可右键“当前接口”或选择两个模型下拉框顶部固定的“一键获取模型”来拉取模型；名称中包含 `image`（不区分大小写）的模型会加入图像生成列表，其余模型会加入图像反推列表。两个模块会再按接口类型筛选下拉列表：Gemini 仅显示名称中包含 `gemini` 的模型，OpenAI 兼容仅显示其他模型。两个模块不再内置默认模型。
+- 图像生成支持 OpenAI 兼容和 Gemini 两种接口类型。OpenAI 兼容模式可明确选择 `Generations` 或 `Edits`：前者支持文生图及中转站兼容的参考图生图，后者要求至少一张参考图；Gemini 统一使用 `generateContent`。
 - 可在 AI 连接设置中选择生成图像保存目录；生成结果保留临时预览的同时，会额外保存一份永久副本。
 - AI 连接设置支持自定义任务超时时长；保存目录、接口和超时设置会保存在 `liangyi-ai-settings.json` 中。
-- 图像反推支持 OpenAI/Gemini 请求格式、接口联动模型预设、自定义模型，以及“反推 / 编辑 / 不使用预设”三种提示词模式。
+- 图像反推支持 OpenAI/Gemini 请求格式、接口拉取模型、自定义模型，以及“反推 / 编辑 / 不使用预设”三种提示词模式。
 - 图像反推参考图通过“+”抓取当前 Photoshop 画布；参考图不是必填项，可连续提交多个独立请求。
 - 每个反推请求都会在状态区域实时显示已用时间和超时上限；文本结果可在插件内查看并复制。
 - 同一次插件会话中的反推结果会按完成顺序保留，可使用上一条/下一条切换，并支持复制当前、删除当前和清空全部。
@@ -106,10 +107,11 @@ English:
 - Select target layers and review the preview before running Batch Rename.
 - Font Management uses the font list currently available to Photoshop.
 - Baidu Translate requires saving your Baidu Translate APP ID and API KEY first.
-- AI Image Generation requires endpoint, key, model, and related settings in the connection panel.
+- AI Image Generation requires an endpoint and API key in Connection Settings. Pull models by right-clicking the current endpoint or choosing the fixed `Fetch Models` action at the top of either model picker. Names containing `image` (case-insensitive) are added to Image Generation, while all remaining names are added to Image Reverse. Each module then filters its picker by interface type: Gemini shows only model names containing `gemini`, while OpenAI-compatible mode shows all other models. Neither module includes built-in default models.
+- Image Generation supports OpenAI-compatible and Gemini request types. OpenAI-compatible requests explicitly use either `Generations` or `Edits`: Generations supports text-only generation and relay-compatible reference-image generation, while Edits requires at least one reference image. Gemini uses `generateContent`.
 - Choose an image output folder in the AI connection settings to keep a permanent copy while retaining the temporary preview workflow.
 - AI connection settings include a persistent task timeout. Output folder, endpoint, and timeout preferences are stored in `liangyi-ai-settings.json`.
-- Image Reverse supports OpenAI/Gemini request formats, provider-specific model presets, custom models, and Reverse/Edit/No Preset prompt modes.
+- Image Reverse supports OpenAI/Gemini request formats, interface-provided models, custom models, and Reverse/Edit/No Preset prompt modes.
 - Use the “+” tile to capture the current Photoshop canvas as a reference. A reference is optional, and multiple independent requests can run concurrently.
 - Each reverse request reports elapsed time and its timeout limit in the status area. Returned text can be reviewed and copied inside the plugin.
 - Reverse results are retained in completion order for the current plugin session, with Previous/Next navigation plus Copy Current, Delete Current, and Clear All actions.
@@ -131,7 +133,7 @@ English:
 ## 项目结构 / Project Structure
 
 ```text
-Liangyi_Design_Assistant-1.0.4/
+Liangyi_Design_Assistant-1.0.5/
 ├─ manifest.json
 ├─ index.html
 ├─ main.js
@@ -243,14 +245,14 @@ The current manifest declares permissions for document read/write, layer read/wr
 中文：
 
 - 插件 ID：`com.liangyi.designAssistant`
-- manifest 版本号：`1.0.4`
-- 当前目录名：`Liangyi_Design_Assistant-1.0.4`
+- manifest 版本号：`1.0.5`
+- 当前目录名：`Liangyi_Design_Assistant-1.0.5`
 
 English:
 
 - Plugin ID: `com.liangyi.designAssistant`
-- Manifest version: `1.0.4`
-- Current folder name: `Liangyi_Design_Assistant-1.0.4`
+- Manifest version: `1.0.5`
+- Current folder name: `Liangyi_Design_Assistant-1.0.5`
 
 ## 许可 / License
 

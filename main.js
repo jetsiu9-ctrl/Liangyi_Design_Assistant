@@ -658,7 +658,7 @@ function getMainPanelHTML() {
                             <sp-textarea id="resultImageLinksText" class="result-image-links-text" readonly rows="4"></sp-textarea>
                         </section>
 
-                        <section id="referenceSection" class="reference-section is-hidden">
+                        <section id="referenceSection" class="reference-section">
                             <section class="reference-header">
                                 <sp-label>参考图</sp-label>
                                 <sp-body id="referenceCountText" size="S">0/8</sp-body>
@@ -684,26 +684,37 @@ function getMainPanelHTML() {
 
                         <section class="field-row">
                             <section class="field">
-                                <sp-label for="modePicker">模式</sp-label>
-                                <sp-picker id="modePicker">
+                                <sp-label for="imageProviderPicker">接口类型</sp-label>
+                                <sp-picker id="imageProviderPicker">
                                     <sp-menu slot="options">
-                                        <sp-menu-item value="text2img" selected>文生图</sp-menu-item>
-                                        <sp-menu-item value="img2img">图像编辑</sp-menu-item>
+                                        <sp-menu-item value="openai" selected>OpenAI兼容</sp-menu-item>
+                                        <sp-menu-item value="gemini">Gemini</sp-menu-item>
                                     </sp-menu>
                                 </sp-picker>
                             </section>
 
-                            <section class="field">
-                                <sp-label for="modelPicker">模型</sp-label>
-                                <sp-picker id="modelPicker">
+                            <section id="imageEndpointField" class="field">
+                                <sp-label for="imageEndpointPicker">请求接口</sp-label>
+                                <sp-picker id="imageEndpointPicker">
                                     <sp-menu slot="options">
-                                        <sp-menu-item value="gpt-image-2" selected>gpt-image-2</sp-menu-item>
-                                        <sp-menu-item value="gemini-3-pro-image-preview">gemini-3-pro-image-preview</sp-menu-item>
-                                        <sp-menu-item value="gemini-3.1-flash-image-preview">gemini-3.1-flash-image-preview</sp-menu-item>
+                                        <sp-menu-item value="generations" selected>Generations</sp-menu-item>
+                                        <sp-menu-item value="edits">Edits</sp-menu-item>
                                     </sp-menu>
                                 </sp-picker>
                             </section>
                         </section>
+
+                        <section class="field-row">
+                            <section class="field">
+                                <sp-label for="modelPicker">模型</sp-label>
+                                <sp-picker id="modelPicker">
+                                    <sp-menu id="modelPickerMenu" slot="options">
+                                        <sp-menu-item value="__pull_models__">一键获取模型</sp-menu-item>
+                                    </sp-menu>
+                                </sp-picker>
+                            </section>
+                        </section>
+                        <sp-body class="info-text" size="S">Generations 支持文生图和中转站兼容的参考图生图；Edits 至少需要一张参考图。Gemini 使用 generateContent。</sp-body>
 
                         <section class="field-row">
                             <section class="field">
@@ -781,14 +792,21 @@ function getMainPanelHTML() {
                     <section class="ai-module-panel">
                         <sp-heading size="S">图像反推</sp-heading>
 
-                        <section class="reference-section image-reverse-card">
-                            <section class="image-reverse-section-header">
+                        <section id="imageReverseReferenceSection" class="reference-section">
+                            <section class="reference-header">
                                 <sp-label>参考图</sp-label>
                                 <sp-body id="imageReverseImageCount" size="S">0/8</sp-body>
                             </section>
-                            <sp-body class="info-text" size="S">点击“+”添加当前 Photoshop 画布；不添加参考图也可以发送请求。</sp-body>
-                            <section id="imageReverseImageList" class="reference-list"></section>
-                            <section class="button-row image-reverse-upload-actions">
+                            <sp-body class="info-text">点击“+”添加当前 Photoshop 画布；不添加参考图也可以发送请求。</sp-body>
+                            <section id="imageReverseImageList" class="reference-list">
+                                <section class="reference-cell reference-add-cell">
+                                    <sp-button id="imageReverseAddButton" class="reference-add-tile" variant="secondary">
+                                        <sp-label class="reference-add-icon">+</sp-label>
+                                        <sp-label class="reference-add-text">添加</sp-label>
+                                    </sp-button>
+                                </section>
+                            </section>
+                            <section class="button-row">
                                 <sp-button id="imageReverseClearImagesButton" variant="secondary" disabled>
                                     <sp-label>清空</sp-label>
                                 </sp-button>
@@ -822,8 +840,7 @@ function getMainPanelHTML() {
                                 <sp-label for="imageReverseModelPicker">模型</sp-label>
                                 <sp-picker id="imageReverseModelPicker">
                                     <sp-menu id="imageReverseModelPickerMenu" slot="options">
-                                        <sp-menu-item value="gemini-3.5-flash" selected>gemini-3.5-flash</sp-menu-item>
-                                        <sp-menu-item value="gemini-3.6-flash">gemini-3.6-flash</sp-menu-item>
+                                        <sp-menu-item value="__pull_models__">一键获取模型</sp-menu-item>
                                         <sp-menu-item value="custom">使用自定义模型</sp-menu-item>
                                     </sp-menu>
                                 </sp-picker>
@@ -919,9 +936,12 @@ function getMainPanelHTML() {
                                 <sp-label>+</sp-label>
                             </sp-action-button>
                         </section>
-                        <sp-body class="info-text interface-help-text" size="S">点击"+"添加接口，右键下拉框可编辑</sp-body>
+                        <sp-body class="info-text interface-help-text" size="S">点击"+"添加接口；右键下拉框可拉取模型、编辑或删除</sp-body>
 
                         <section id="interfaceActionMenu" class="interface-action-menu is-hidden">
+                            <sp-button id="pullModelsButton" variant="secondary">
+                                <sp-label>拉取模型</sp-label>
+                            </sp-button>
                             <sp-button id="editInterfaceButton" variant="secondary">
                                 <sp-label>编辑</sp-label>
                             </sp-button>
@@ -1055,13 +1075,21 @@ entrypoints.setup({
                         window.initPanel(rootNode);
                         console.log('[HaimatiPanel] 初始化完成');
                     }
-                    if (typeof window.initAIAssistant === 'function') {
-                        await window.initAIAssistant(rootNode);
-                        console.log('[HaimatiPanel] AI 助手模块初始化完成');
-                    }
                     if (typeof window.initImageReverse === 'function') {
-                        await window.initImageReverse(rootNode);
-                        console.log('[HaimatiPanel] 图像反推模块初始化完成');
+                        try {
+                            await window.initImageReverse(rootNode);
+                            console.log('[HaimatiPanel] 图像反推模块初始化完成');
+                        } catch (error) {
+                            console.error('[HaimatiPanel] 图像反推模块初始化失败', error);
+                        }
+                    }
+                    if (typeof window.initAIAssistant === 'function') {
+                        try {
+                            await window.initAIAssistant(rootNode);
+                            console.log('[HaimatiPanel] AI 助手模块初始化完成');
+                        } catch (error) {
+                            console.error('[HaimatiPanel] AI 助手模块初始化失败', error);
+                        }
                     }
                 });
             },

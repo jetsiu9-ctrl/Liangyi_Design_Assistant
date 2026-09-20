@@ -7,15 +7,8 @@ const { storage } = require("uxp");
 const MAX_IMAGES = 8;
 const MODULE_SETTINGS_KEY = "liangyi-image-reverse-settings";
 const DEFAULT_PROVIDER = "gemini";
-const MODEL_PRESETS = {
-  openai: [
-    { value: "gpt-5.6-sol", label: "gpt-5.6-sol" }
-  ],
-  gemini: [
-    { value: "gemini-3.5-flash", label: "gemini-3.5-flash" },
-    { value: "gemini-3.6-flash", label: "gemini-3.6-flash" }
-  ]
-};
+const MODEL_PULL_ACTION_VALUE = "__pull_models__";
+const MODEL_PULL_ACTION_LABEL = "一键获取模型";
 const PRESET_FILES = {
   reverse: "src/prompts/image-reverse-preset.txt",
   edit: "src/prompts/image-edit-preset.txt"
@@ -48,26 +41,48 @@ function getPickerValue(id) {
   if (!picker) {
     return "";
   }
-  if (picker.value) {
-    return String(picker.value);
-  }
   const selected = picker.querySelector("sp-menu-item[selected]");
-  return selected ? String(selected.value || "") : "";
+  if (selected) {
+    return String(selected.getAttribute("value") || selected.value || "");
+  }
+  if (picker.selectedItem && picker.selectedItem.value) {
+    return String(picker.selectedItem.value);
+  }
+  return picker.value ? String(picker.value) : "";
 }
 
 function setPickerValue(id, value) {
   const picker = element(id);
-  if (!picker) {
+  if (!picker || !value) {
     return;
   }
-  picker.value = value;
+  const targetValue = String(value);
+  let matched = false;
   picker.querySelectorAll("sp-menu-item").forEach((item) => {
-    if (String(item.value) === String(value)) {
+    const itemValue = String(item.getAttribute("value") || item.value || "");
+    if (itemValue === targetValue) {
       item.setAttribute("selected", "");
+      matched = true;
     } else {
       item.removeAttribute("selected");
     }
   });
+  if (matched) {
+    picker.setAttribute("value", targetValue);
+  } else {
+    picker.removeAttribute("value");
+  }
+}
+
+function clearPickerValue(id) {
+  const picker = element(id);
+  if (!picker) {
+    return;
+  }
+  picker.querySelectorAll("sp-menu-item[selected]").forEach((item) => {
+    item.removeAttribute("selected");
+  });
+  picker.removeAttribute("value");
 }
 
 function setStatus(message) {
@@ -232,6 +247,7 @@ function renderImages() {
     wrapper.className = "reference-cell reference-add-cell";
 
     const addButton = document.createElement("sp-button");
+    addButton.id = "imageReverseAddButton";
     addButton.className = "reference-add-tile";
     addButton.setAttribute("variant", "secondary");
     addButton.disabled = captureInProgress;
@@ -332,38 +348,102 @@ async function loadPreset(preset) {
 
 function getModelName() {
   const modelChoice = getPickerValue("imageReverseModelPicker");
-  if (modelChoice && modelChoice !== "custom") {
+  if (modelChoice && modelChoice !== "custom" && modelChoice !== MODEL_PULL_ACTION_VALUE) {
     return modelChoice;
   }
   return String(element("imageReverseCustomModelInput").value || "").trim();
 }
 
+function getPulledReverseModels() {
+  if (!window.LiangyiAIConfig || typeof window.LiangyiAIConfig.getCurrent !== "function") {
+    return [];
+  }
+  const models = window.LiangyiAIConfig.getCurrent().reverseModels;
+  return Array.isArray(models) ? models : [];
+}
+
+function isGeminiModel(model) {
+  return String(model || "").toLowerCase().includes("gemini");
+}
+
+function getModelPresets(provider) {
+  const isGeminiProvider = provider === "gemini";
+  return getPulledReverseModels()
+    .filter((model) => isGeminiModel(model) === isGeminiProvider)
+    .map((model) => ({
+      value: String(model),
+      label: String(model)
+    }));
+}
+
 function renderModelPicker(provider, preferredModel) {
   const menu = element("imageReverseModelPickerMenu");
-  const presets = MODEL_PRESETS[provider] || MODEL_PRESETS[DEFAULT_PROVIDER];
+  const presets = getModelPresets(provider);
   const validValues = presets.map((item) => item.value).concat("custom");
   const selectedValue = validValues.includes(preferredModel)
     ? preferredModel
-    : presets[0].value;
+    : (presets[0]?.value || "");
   menu.textContent = "";
+
+  const pullItem = document.createElement("sp-menu-item");
+  pullItem.setAttribute("value", MODEL_PULL_ACTION_VALUE);
+  pullItem.textContent = MODEL_PULL_ACTION_LABEL;
+  pullItem.addEventListener("click", triggerReverseModelPull);
+  menu.appendChild(pullItem);
+
   presets.concat({ value: "custom", label: "使用自定义模型" }).forEach((preset) => {
     const item = document.createElement("sp-menu-item");
-    item.value = preset.value;
+    item.setAttribute("value", preset.value);
     item.textContent = preset.label;
     if (preset.value === selectedValue) {
       item.setAttribute("selected", "");
     }
     menu.appendChild(item);
   });
-  setPickerValue("imageReverseModelPicker", selectedValue);
+  if (selectedValue) {
+    setPickerValue("imageReverseModelPicker", selectedValue);
+  } else {
+    clearPickerValue("imageReverseModelPicker");
+  }
   updateModelUi();
 }
 
 function updateModelUi() {
-  const isCustom = getPickerValue("imageReverseModelPicker") === "custom";
+  const selectedModel = getPickerValue("imageReverseModelPicker");
+  const isCustom = selectedModel === "custom";
   const input = element("imageReverseCustomModelInput");
   input.disabled = !isCustom;
   saveModuleSettings();
+}
+
+async function triggerReverseModelPull(event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  if (!window.LiangyiAIConfig || typeof window.LiangyiAIConfig.pullModels !== "function") {
+    setStatus("连接设置尚未初始化，请重新打开插件面板。");
+    return;
+  }
+  setStatus("正在从当前接口拉取模型...");
+  try {
+    const result = await window.LiangyiAIConfig.pullModels();
+    setStatus(
+      `模型拉取完成：共 ${result.total} 个，图像生成 ${result.imageModels.length} 个，图像反推 ${result.reverseModels.length} 个。`
+    );
+  } catch (error) {
+    updateProviderUi("");
+    setStatus(`模型拉取失败：${error.message}`);
+  }
+}
+
+async function handleReverseModelSelection() {
+  const selectedModel = getPickerValue("imageReverseModelPicker");
+  if (selectedModel === MODEL_PULL_ACTION_VALUE) {
+    await triggerReverseModelPull();
+    return;
+  }
+  updateModelUi();
 }
 
 function buildOpenAiUrl(baseUrl) {
@@ -620,9 +700,11 @@ async function copyResult() {
 
 function saveModuleSettings() {
   try {
+    const selectedModel = getPickerValue("imageReverseModelPicker");
     localStorage.setItem(MODULE_SETTINGS_KEY, JSON.stringify({
+      provider: getPickerValue("imageReverseProviderPicker") || DEFAULT_PROVIDER,
       preset: getPickerValue("imageReversePresetPicker") || "reverse",
-      model: getPickerValue("imageReverseModelPicker") || "",
+      model: selectedModel === MODEL_PULL_ACTION_VALUE ? "" : selectedModel,
       customModel: String(element("imageReverseCustomModelInput").value || ""),
       prompt: String(element("imageReversePromptInput").value || "")
     }));
@@ -638,7 +720,7 @@ function loadModuleSettings() {
   } catch (error) {
     saved = {};
   }
-  setPickerValue("imageReverseProviderPicker", DEFAULT_PROVIDER);
+  setPickerValue("imageReverseProviderPicker", saved.provider || DEFAULT_PROVIDER);
   setPickerValue("imageReversePresetPicker", saved.preset || "reverse");
   element("imageReverseCustomModelInput").value = saved.customModel || "";
   element("imageReversePromptInput").value = saved.prompt || "";
@@ -665,7 +747,7 @@ function updatePresetUi() {
 async function startReverse() {
   const model = getModelName();
   if (!model) {
-    setStatus("请填写支持图像理解的自定义模型名称。");
+    setStatus("请先在模型下拉框中点击“一键获取模型”并选择模型，或填写自定义模型名称。");
     return;
   }
   const provider = getPickerValue("imageReverseProviderPicker") || DEFAULT_PROVIDER;
@@ -747,7 +829,7 @@ function bindEvents() {
   });
   ["change", "input"].forEach((eventName) => {
     element("imageReverseProviderPicker").addEventListener(eventName, updateProviderUi);
-    element("imageReverseModelPicker").addEventListener(eventName, updateModelUi);
+    element("imageReverseModelPicker").addEventListener(eventName, handleReverseModelSelection);
     element("imageReversePresetPicker").addEventListener(eventName, updatePresetUi);
   });
   element("imageReverseCustomModelInput").addEventListener("change", saveModuleSettings);
@@ -764,11 +846,18 @@ async function initImageReverse(rootNode) {
   }
   initialized = true;
   bindEvents();
+  element("imageReverseReferenceSection").classList.remove("is-hidden");
   renderImages();
   renderCurrentResult();
   loadModuleSettings();
   setStatus("就绪。");
 }
 
+window.refreshImageReverseModels = function() {
+  if (!initialized) {
+    return;
+  }
+  updateProviderUi(getPickerValue("imageReverseModelPicker"));
+};
 window.initImageReverse = initImageReverse;
 })();

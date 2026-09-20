@@ -17,6 +17,9 @@ const DEFAULT_POLL_INTERVAL_MS = 5000;
 const DEFAULT_GENERATION_TIMEOUT_SECONDS = 300;
 const MAX_GENERATION_TIMEOUT_SECONDS = 2147483;
 const GENERATION_STATUS_INTERVAL_MS = 1000;
+const MODEL_PULL_TIMEOUT_MS = 30000;
+const MODEL_PULL_ACTION_VALUE = "__pull_models__";
+const MODEL_PULL_ACTION_LABEL = "一键获取模型";
 const RESULT_LAYER_NAME_PREFIX = "\u51c9\u610fAI_";
 const PROMPT_MIN_ROWS = 6;
 const PROMPT_MAX_ROWS = 16;
@@ -35,10 +38,8 @@ const SIZE_MAP = {
   "2:1": { "1k": "2048x1024", "2k": "2688x1344", "4k": "3840x1920" },
   "1:2": { "1k": "1024x2048", "2k": "1344x2688", "4k": "1920x3840" }
 };
-const GEMINI_IMAGE_MODELS = {
-  "gemini-3-pro-image-preview": "/v1beta/models/gemini-3-pro-image-preview:generateContent",
-  "gemini-3.1-flash-image-preview": "/v1beta/models/gemini-3.1-flash-image-preview:generateContent"
-};
+const DEFAULT_IMAGE_PROVIDER = "openai";
+const DEFAULT_IMAGE_ENDPOINT = "generations";
 const GEMINI_IMAGE_SIZE_MAP = {
   "1k": "1K",
   "2k": "2K",
@@ -65,6 +66,7 @@ let activeGenerationCount = 0;
 let resultFileSequence = 0;
 let generationStatusSequence = 0;
 let globalStatusMessage = "就绪。";
+let modelPullPromise = null;
 const generationStatusItems = new Map();
 
 function element(id) {
@@ -209,6 +211,7 @@ function setBusy(isBusy) {
   updateResultButtons(isBusy);
   element("interfacePicker").disabled = isBusy;
   element("addInterfaceButton").disabled = isBusy;
+  element("pullModelsButton").disabled = isBusy;
   element("editInterfaceButton").disabled = isBusy;
   element("deleteInterfaceButton").disabled = isBusy;
   element("cancelInterfaceActionButton").disabled = isBusy;
@@ -254,12 +257,50 @@ function createInterfaceId() {
   return `interface-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
 }
 
+function normalizeModelNames(value) {
+  const seen = new Set();
+  return (Array.isArray(value) ? value : [])
+    .map((item) => String(item || "").trim())
+    .filter((item) => {
+      const key = item.toLowerCase();
+      if (!item || seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    })
+    .sort((left, right) => left.localeCompare(right, undefined, { sensitivity: "base" }));
+}
+
+function normalizeEndpointPreferences(value) {
+  const preferences = {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return preferences;
+  }
+  Object.entries(value).forEach(([model, endpoint]) => {
+    const normalizedModel = String(model || "").trim();
+    if (normalizedModel && (endpoint === "generations" || endpoint === "edits")) {
+      preferences[normalizedModel] = endpoint;
+    }
+  });
+  return preferences;
+}
+
 function normalizeInterface(item, index) {
+  const imageModels = normalizeModelNames(item?.imageModels);
+  const requestedImageModel = String(item?.imageModel || "").trim();
   return {
     id: String(item?.id || createInterfaceId()),
     name: String(item?.name || `${DEFAULT_INTERFACE_NAME} ${index + 1}`).trim() || `${DEFAULT_INTERFACE_NAME} ${index + 1}`,
     baseUrl: normalizeBaseUrl(item?.baseUrl),
-    apiKey: String(item?.apiKey || "")
+    apiKey: String(item?.apiKey || ""),
+    imageModels,
+    reverseModels: normalizeModelNames(item?.reverseModels),
+    imageProvider: item?.imageProvider === "gemini" ? "gemini" : DEFAULT_IMAGE_PROVIDER,
+    imageModel: imageModels.includes(requestedImageModel)
+      ? requestedImageModel
+      : (imageModels[0] || ""),
+    imageEndpointByModel: normalizeEndpointPreferences(item?.imageEndpointByModel)
   };
 }
 
@@ -302,6 +343,19 @@ function syncCurrentInterfaceFromFields() {
   const current = getCurrentInterface();
   current.baseUrl = normalizeBaseUrl(element("baseUrlInput").value);
   current.apiKey = String(element("apiKeyInput").value || "").trim();
+  const provider = getPickerValue("imageProviderPicker");
+  const imageModel = getPickerValue("modelPicker");
+  const imageEndpoint = getPickerValue("imageEndpointPicker");
+  if (provider === "openai" || provider === "gemini") {
+    current.imageProvider = provider;
+  }
+  if (imageModel && imageModel !== MODEL_PULL_ACTION_VALUE) {
+    current.imageModel = imageModel;
+  }
+  const activeModel = getSelectedImageModelName();
+  if (activeModel && (imageEndpoint === "generations" || imageEndpoint === "edits")) {
+    current.imageEndpointByModel[activeModel] = imageEndpoint;
+  }
   settings.baseUrl = current.baseUrl;
   settings.apiKey = current.apiKey;
 }
@@ -319,7 +373,7 @@ function renderInterfacePicker() {
   menu.textContent = "";
   settings.interfaces.forEach((item) => {
     const menuItem = document.createElement("sp-menu-item");
-    menuItem.value = item.id;
+    menuItem.setAttribute("value", item.id);
     if (item.id === settings.currentInterfaceId) {
       menuItem.setAttribute("selected", "");
     }
@@ -329,6 +383,83 @@ function renderInterfacePicker() {
     menu.appendChild(menuItem);
   });
   setPickerValue("interfacePicker", settings.currentInterfaceId);
+}
+
+function getCurrentImageModels() {
+  return normalizeModelNames(getCurrentInterface().imageModels);
+}
+
+function isGeminiModel(model) {
+  return String(model || "").toLowerCase().includes("gemini");
+}
+
+function getImageModelsForProvider(provider) {
+  const isGeminiProvider = provider === "gemini";
+  return getCurrentImageModels().filter((model) => isGeminiModel(model) === isGeminiProvider);
+}
+
+function getSelectedImageModelName() {
+  const customModel = String(element("customModelInput").value || "").trim();
+  const selectedModel = getPickerValue("modelPicker");
+  return customModel || (selectedModel === MODEL_PULL_ACTION_VALUE ? "" : selectedModel);
+}
+
+function renderImageModelPicker(preferredModel) {
+  const menu = element("modelPickerMenu");
+  const provider = getPickerValue("imageProviderPicker") || DEFAULT_IMAGE_PROVIDER;
+  const models = getImageModelsForProvider(provider);
+  const selectedModel = models.includes(preferredModel) ? preferredModel : (models[0] || "");
+  menu.textContent = "";
+
+  const pullItem = document.createElement("sp-menu-item");
+  pullItem.setAttribute("value", MODEL_PULL_ACTION_VALUE);
+  pullItem.textContent = MODEL_PULL_ACTION_LABEL;
+  pullItem.addEventListener("click", triggerModelPullFromImagePicker);
+  menu.appendChild(pullItem);
+
+  models.forEach((model) => {
+    const item = document.createElement("sp-menu-item");
+    item.setAttribute("value", model);
+    item.textContent = model;
+    if (model === selectedModel) {
+      item.setAttribute("selected", "");
+    }
+    menu.appendChild(item);
+  });
+  getCurrentInterface().imageModel = selectedModel;
+  if (selectedModel) {
+    setPickerValue("modelPicker", selectedModel);
+  } else {
+    clearPickerValue("modelPicker");
+  }
+}
+
+function getSavedImageEndpoint(model) {
+  const current = getCurrentInterface();
+  return current.imageEndpointByModel[model] || DEFAULT_IMAGE_ENDPOINT;
+}
+
+function updateImageProviderUi() {
+  const provider = getPickerValue("imageProviderPicker") || DEFAULT_IMAGE_PROVIDER;
+  const endpointField = element("imageEndpointField");
+  endpointField.classList.toggle("is-hidden", provider === "gemini");
+  element("imageEndpointPicker").disabled = provider === "gemini";
+  element("referenceSection").classList.remove("is-hidden");
+}
+
+function applyImageGenerationPreferences() {
+  const current = getCurrentInterface();
+  setPickerValue("imageProviderPicker", current.imageProvider || DEFAULT_IMAGE_PROVIDER);
+  renderImageModelPicker(current.imageModel);
+  const model = getSelectedImageModelName();
+  setPickerValue("imageEndpointPicker", getSavedImageEndpoint(model));
+  updateImageProviderUi();
+}
+
+function notifyModelConsumers() {
+  if (typeof window.refreshImageReverseModels === "function") {
+    window.refreshImageReverseModels();
+  }
 }
 
 function hideInterfaceActionMenu() {
@@ -368,10 +499,6 @@ function apiUrl(path, query) {
   return url.toString();
 }
 
-function isGeminiImageModel(model) {
-  return Boolean(GEMINI_IMAGE_MODELS[model]);
-}
-
 function getApiKey() {
   const value = String(element("apiKeyInput").value || settings.apiKey || "").trim();
   if (!value) {
@@ -406,15 +533,15 @@ function readPickerDomValue(picker) {
   if (!picker) {
     return "";
   }
+  const selectedItem = picker.querySelector("sp-menu-item[selected]");
+  if (selectedItem && selectedItem.value) {
+    return selectedItem.value;
+  }
   if (picker.selectedItem && picker.selectedItem.value) {
     return picker.selectedItem.value;
   }
   if (picker.value) {
     return picker.value;
-  }
-  const selectedItem = picker.querySelector("sp-menu-item[selected]");
-  if (selectedItem && selectedItem.value) {
-    return selectedItem.value;
   }
   const firstItem = picker.querySelector("sp-menu-item");
   if (firstItem && firstItem.value) {
@@ -428,13 +555,33 @@ function setPickerValue(id, value) {
   if (!picker || !value) {
     return;
   }
+  const targetValue = String(value);
+  let matched = false;
   picker.querySelectorAll("sp-menu-item").forEach((item) => {
-    if (item.value === value) {
+    const itemValue = String(item.getAttribute("value") || item.value || "");
+    if (itemValue === targetValue) {
       item.setAttribute("selected", "");
+      matched = true;
     } else {
       item.removeAttribute("selected");
     }
   });
+  if (matched) {
+    picker.setAttribute("value", targetValue);
+  } else {
+    picker.removeAttribute("value");
+  }
+}
+
+function clearPickerValue(id) {
+  const picker = element(id);
+  if (!picker) {
+    return;
+  }
+  picker.querySelectorAll("sp-menu-item[selected]").forEach((item) => {
+    item.removeAttribute("selected");
+  });
+  picker.removeAttribute("value");
 }
 
 function getImageCount() {
@@ -451,10 +598,9 @@ function parseInteger(value, fallback) {
 }
 
 function getModelValue() {
-  const customModel = String(element("customModelInput").value || "").trim();
-  const model = customModel || getPickerValue("modelPicker");
+  const model = getSelectedImageModelName();
   if (!model) {
-    throw new Error("模型不能为空。");
+    throw new Error("请先在模型下拉框中点击“一键获取模型”，并选择一个图像模型。");
   }
   return model;
 }
@@ -627,6 +773,8 @@ async function loadSettings() {
   }
   applyCurrentInterfaceToFields();
   renderInterfacePicker();
+  applyImageGenerationPreferences();
+  notifyModelConsumers();
   updateOutputFolderUi();
   applyGenerationSettingsToFields();
 }
@@ -648,9 +796,11 @@ async function selectInterface(interfaceId) {
   settings.currentInterfaceId = interfaceId;
   applyCurrentInterfaceToFields();
   renderInterfacePicker();
+  applyImageGenerationPreferences();
   hideInterfaceActionMenu();
   hideInterfaceForm();
   await persistSettings();
+  notifyModelConsumers();
   setStatus(`已切换接口：${getCurrentInterface().name}`);
 }
 
@@ -666,12 +816,12 @@ async function saveInterfaceFromForm() {
     ? settings.interfaces.find((entry) => entry.id === editingInterfaceId)
     : null;
   if (!item) {
-    item = {
+    item = normalizeInterface({
       id: createInterfaceId(),
       name,
       baseUrl,
       apiKey
-    };
+    }, settings.interfaces.length);
     settings.interfaces.push(item);
   } else {
     item.name = name;
@@ -683,7 +833,9 @@ async function saveInterfaceFromForm() {
   applyCurrentInterfaceToFields();
   hideInterfaceForm();
   renderInterfacePicker();
+  applyImageGenerationPreferences();
   await persistSettings();
+  notifyModelConsumers();
   setStatus(`已保存接口：${item.name}`);
 }
 
@@ -696,8 +848,10 @@ async function deleteCurrentInterface() {
   settings.currentInterfaceId = settings.interfaces[0].id;
   applyCurrentInterfaceToFields();
   renderInterfacePicker();
+  applyImageGenerationPreferences();
   hideInterfaceActionMenu();
   await persistSettings();
+  notifyModelConsumers();
   setStatus(`已删除接口：${current.name}`);
 }
 
@@ -709,6 +863,32 @@ function requestHeaders(contentType) {
     headers["Content-Type"] = contentType;
   }
   return headers;
+}
+
+function geminiRequestHeaders() {
+  const apiKey = getApiKey();
+  return {
+    Authorization: `Bearer ${apiKey}`,
+    "x-goog-api-key": apiKey,
+    "Content-Type": "application/json"
+  };
+}
+
+function buildGeminiImageUrl(model) {
+  const baseUrl = String(element("baseUrlInput").value || settings.baseUrl || "")
+    .trim()
+    .replace(/\/+$/u, "");
+  if (/:[a-z]+$/iu.test(baseUrl) && /\/models\//iu.test(baseUrl)) {
+    return baseUrl;
+  }
+  const encodedModel = encodeURIComponent(String(model || "").replace(/^models\//iu, ""));
+  if (/\/v1beta\/models$/iu.test(baseUrl)) {
+    return `${baseUrl}/${encodedModel}:generateContent`;
+  }
+  if (/\/v1beta$/iu.test(baseUrl)) {
+    return `${baseUrl}/models/${encodedModel}:generateContent`;
+  }
+  return `${normalizeBaseUrl(baseUrl)}/v1beta/models/${encodedModel}:generateContent`;
 }
 
 async function requestJson(url, options, timeoutState) {
@@ -733,6 +913,104 @@ async function requestJson(url, options, timeoutState) {
     throw new Error(message);
   }
   return data;
+}
+
+function extractModelNames(data) {
+  const collections = [
+    Array.isArray(data) ? data : null,
+    data?.data,
+    data?.models,
+    data?.data?.models
+  ];
+  const names = [];
+  collections.forEach((collection) => {
+    if (!Array.isArray(collection)) {
+      return;
+    }
+    collection.forEach((item) => {
+      const name = typeof item === "string"
+        ? item
+        : item?.id || item?.name || item?.model;
+      if (name) {
+        names.push(name);
+      }
+    });
+  });
+  return normalizeModelNames(names);
+}
+
+async function pullModelsForCurrentInterface() {
+  syncCurrentInterfaceFromFields();
+  const current = getCurrentInterface();
+  setStatus(`正在从 ${current.name} 拉取模型...`);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), MODEL_PULL_TIMEOUT_MS);
+  let data;
+  try {
+    data = await requestJson(apiUrl("/v1/models"), {
+      method: "GET",
+      headers: requestHeaders(),
+      signal: controller.signal
+    });
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw new Error("拉取模型超时（30 秒）。");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+  const models = extractModelNames(data);
+  if (!models.length) {
+    throw new Error("接口没有返回可识别的模型名称。");
+  }
+
+  const imageModels = models.filter((model) => model.toLowerCase().includes("image"));
+  const reverseModels = models.filter((model) => !model.toLowerCase().includes("image"));
+  current.imageModels = imageModels;
+  current.reverseModels = reverseModels;
+  renderImageModelPicker(current.imageModel);
+  setPickerValue("imageEndpointPicker", getSavedImageEndpoint(getSelectedImageModelName()));
+  hideInterfaceActionMenu();
+  await persistSettings();
+  notifyModelConsumers();
+  setStatus(
+    `模型拉取完成：共 ${models.length} 个，图像生成 ${imageModels.length} 个，图像反推 ${reverseModels.length} 个。`
+  );
+  return {
+    total: models.length,
+    imageModels: imageModels.slice(),
+    reverseModels: reverseModels.slice()
+  };
+}
+
+function pullModelsWithUi() {
+  if (modelPullPromise) {
+    return modelPullPromise;
+  }
+  modelPullPromise = (async () => {
+    setBusy(true);
+    try {
+      return await pullModelsForCurrentInterface();
+    } finally {
+      setBusy(false);
+      modelPullPromise = null;
+    }
+  })();
+  return modelPullPromise;
+}
+
+async function triggerModelPullFromImagePicker(event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  try {
+    await pullModelsWithUi();
+  } catch (error) {
+    renderImageModelPicker(getCurrentInterface().imageModel);
+    setStatus(`模型拉取失败：${error.message}`);
+  }
 }
 
 function extractTaskId(data) {
@@ -961,11 +1239,6 @@ function renderReferences() {
   }
 }
 
-function updateModeUi() {
-  // Reference images are optional in both text-to-image and image-edit modes.
-  element("referenceSection").classList.remove("is-hidden");
-}
-
 function countPromptLineUnits(line) {
   let units = 0;
   Array.from(line || "").forEach((char) => {
@@ -995,14 +1268,8 @@ function bindPromptAutoRows() {
 
 async function submitTextToImage(prompt, timeoutState) {
   const model = getModelValue();
-  if (isGeminiImageModel(model)) {
-    refreshGenerationStatus(timeoutState, `正在提交生成请求：模型 ${model}，尺寸 ${getGeminiImageSize()}`);
-    setStatus(`正在提交生成请求：模型 ${model}，尺寸 ${getGeminiImageSize()}`);
-    return submitGeminiImages(prompt, referenceImages, timeoutState);
-  }
-
-  refreshGenerationStatus(timeoutState, `正在提交生成请求：模型 ${model}，尺寸 ${getActualSize()}`);
-  setStatus(`正在提交生成请求：模型 ${model}，尺寸 ${getActualSize()}`);
+  refreshGenerationStatus(timeoutState, `正在通过 Generations 提交请求：模型 ${model}，尺寸 ${getActualSize()}`);
+  setStatus(`正在通过 Generations 提交请求：模型 ${model}，尺寸 ${getActualSize()}`);
 
   const useAsync = Boolean(element("asyncCheckbox").checked);
   if (referenceImages.length) {
@@ -1029,19 +1296,15 @@ async function submitTextToImage(prompt, timeoutState) {
 
 async function submitImageEdit(prompt, timeoutState) {
   if (!referenceImages.length) {
-    throw new Error("使用编辑模式前，请至少添加一张当前画布参考图。");
+    throw new Error("使用 Edits 请求接口前，请至少添加一张当前画布参考图。");
   }
 
   const model = getModelValue();
-  if (isGeminiImageModel(model)) {
-    return submitGeminiImages(prompt, referenceImages, timeoutState);
-  }
-
   const form = new FormData();
   form.append("prompt", prompt);
   appendCommonFormFields(form);
-  refreshGenerationStatus(timeoutState, `正在提交图像编辑请求：模型 ${getModelValue()}，尺寸 ${getActualSize()}`);
-  setStatus(`正在提交图像编辑请求：模型 ${getModelValue()}，尺寸 ${getActualSize()}`);
+  refreshGenerationStatus(timeoutState, `正在通过 Edits 提交请求：模型 ${model}，尺寸 ${getActualSize()}`);
+  setStatus(`正在通过 Edits 提交请求：模型 ${model}，尺寸 ${getActualSize()}`);
 
   referenceImages.forEach((item, index) => {
     form.append("image", new Blob([item.bytes], { type: "image/jpeg" }), `reference_${index + 1}.jpg`);
@@ -1086,9 +1349,9 @@ async function submitGeminiImage(prompt, images, timeoutState) {
     }
   };
 
-  return requestJson(apiUrl(GEMINI_IMAGE_MODELS[model]), {
+  return requestJson(buildGeminiImageUrl(model), {
     method: "POST",
-    headers: requestHeaders("application/json"),
+    headers: geminiRequestHeaders(),
     body: JSON.stringify(payload)
   }, timeoutState);
 }
@@ -1411,10 +1674,16 @@ async function insertFilesIntoPhotoshop(files) {
 }
 
 async function runGenerationFlow(prompt, timeoutState) {
-  const mode = getPickerValue("modePicker");
-  const submitResult = mode === "img2img"
-    ? await submitImageEdit(prompt, timeoutState)
-    : await submitTextToImage(prompt, timeoutState);
+  const provider = getPickerValue("imageProviderPicker") || DEFAULT_IMAGE_PROVIDER;
+  let submitResult;
+  if (provider === "gemini") {
+    submitResult = await submitGeminiImages(prompt, referenceImages, timeoutState);
+  } else {
+    const endpoint = getPickerValue("imageEndpointPicker") || DEFAULT_IMAGE_ENDPOINT;
+    submitResult = endpoint === "edits"
+      ? await submitImageEdit(prompt, timeoutState)
+      : await submitTextToImage(prompt, timeoutState);
+  }
   assertGenerationNotTimedOut(timeoutState);
 
   const taskId = extractTaskId(submitResult);
@@ -1582,6 +1851,14 @@ function bindEvents() {
     showInterfaceForm("");
   });
 
+  element("pullModelsButton").addEventListener("click", async () => {
+    try {
+      await pullModelsWithUi();
+    } catch (error) {
+      setStatus(`模型拉取失败：${error.message}`);
+    }
+  });
+
   element("editInterfaceButton").addEventListener("click", () => {
     showInterfaceForm(settings.currentInterfaceId);
   });
@@ -1608,6 +1885,69 @@ function bindEvents() {
 
   element("cancelInterfaceButton").addEventListener("click", () => {
     hideInterfaceForm();
+  });
+
+  const syncImageProvider = () => {
+    setTimeout(async () => {
+      try {
+        const provider = readPickerDomValue(element("imageProviderPicker")) || DEFAULT_IMAGE_PROVIDER;
+        setPickerValue("imageProviderPicker", provider);
+        getCurrentInterface().imageProvider = provider;
+        renderImageModelPicker(getCurrentInterface().imageModel);
+        setPickerValue("imageEndpointPicker", getSavedImageEndpoint(getSelectedImageModelName()));
+        updateImageProviderUi();
+        await persistSettings();
+      } catch (error) {
+        setStatus(`无法保存接口类型：${error.message}`);
+      }
+    }, 0);
+  };
+
+  const syncImageModel = () => {
+    setTimeout(async () => {
+      try {
+        const model = readPickerDomValue(element("modelPicker"));
+        if (!model) {
+          return;
+        }
+        if (model === MODEL_PULL_ACTION_VALUE) {
+          await triggerModelPullFromImagePicker();
+          return;
+        }
+        setPickerValue("modelPicker", model);
+        getCurrentInterface().imageModel = model;
+        setPickerValue("imageEndpointPicker", getSavedImageEndpoint(getSelectedImageModelName()));
+        await persistSettings();
+      } catch (error) {
+        setStatus(`无法保存图像模型：${error.message}`);
+      }
+    }, 0);
+  };
+
+  const syncImageEndpoint = () => {
+    setTimeout(async () => {
+      try {
+        const endpoint = readPickerDomValue(element("imageEndpointPicker")) || DEFAULT_IMAGE_ENDPOINT;
+        const model = getSelectedImageModelName();
+        setPickerValue("imageEndpointPicker", endpoint);
+        if (model) {
+          getCurrentInterface().imageEndpointByModel[model] = endpoint;
+        }
+        await persistSettings();
+      } catch (error) {
+        setStatus(`无法保存请求接口：${error.message}`);
+      }
+    }, 0);
+  };
+
+  ["change", "input"].forEach((eventName) => {
+    element("imageProviderPicker").addEventListener(eventName, syncImageProvider);
+    element("modelPicker").addEventListener(eventName, syncImageModel);
+    element("imageEndpointPicker").addEventListener(eventName, syncImageEndpoint);
+  });
+
+  element("customModelInput").addEventListener("change", () => {
+    setPickerValue("imageEndpointPicker", getSavedImageEndpoint(getSelectedImageModelName()));
   });
 
   element("generateButton").addEventListener("click", async () => {
@@ -1699,9 +2039,6 @@ function bindPicker(id) {
       const value = readPickerDomValue(picker);
       if (value) {
         setPickerValue(id, value);
-        if (id === "modePicker") {
-          updateModeUi();
-        }
       }
     }, 0);
   };
@@ -1711,8 +2048,6 @@ function bindPicker(id) {
 
 function bindPickers() {
   [
-    "modePicker",
-    "modelPicker",
     "aspectRatioPicker",
     "resolutionPicker",
     "qualityPicker"
@@ -1726,8 +2061,8 @@ function setPickerDefault(id, value) {
 }
 
 function initializePickerDefaults() {
-  setPickerDefault("modePicker", "text2img");
-  setPickerDefault("modelPicker", "gpt-image-2");
+  setPickerDefault("imageProviderPicker", DEFAULT_IMAGE_PROVIDER);
+  setPickerDefault("imageEndpointPicker", DEFAULT_IMAGE_ENDPOINT);
   setPickerDefault("aspectRatioPicker", "auto");
   setPickerDefault("resolutionPicker", "1k");
   setPickerDefault("qualityPicker", "auto");
@@ -1745,8 +2080,8 @@ async function initAIAssistant() {
   bindPromptAutoRows();
   initializePickerDefaults();
   renderReferences();
+  updateImageProviderUi();
   clearResultPreview();
-  updateModeUi();
   await loadSettings();
   setStatus("就绪。");
 }
@@ -1755,11 +2090,17 @@ window.LiangyiAIConfig = {
   getCurrent() {
     const current = getCurrentInterface();
     return {
+      interfaceId: current.id,
       name: current.name,
       baseUrl: current.baseUrl,
       apiKey: current.apiKey,
-      timeoutSeconds: getGenerationTimeoutSeconds()
+      timeoutSeconds: getGenerationTimeoutSeconds(),
+      imageModels: current.imageModels.slice(),
+      reverseModels: current.reverseModels.slice()
     };
+  },
+  pullModels() {
+    return pullModelsWithUi();
   }
 };
 window.initAIAssistant = initAIAssistant;
