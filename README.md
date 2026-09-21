@@ -249,14 +249,14 @@ The current manifest declares permissions for document read/write, layer read/wr
 中文：
 
 - 插件 ID：`com.liangyi.designAssistant`
-- manifest 版本号：`1.0.5`
-- 当前目录名：`Liangyi_Design_Assistant-1.0.5`
+- manifest 版本号：`1.0.8`
+- 当前目录名：`Liangyi_Design_Assistant-1.0.8`
 
 English:
 
 - Plugin ID: `com.liangyi.designAssistant`
-- Manifest version: `1.0.5`
-- Current folder name: `Liangyi_Design_Assistant-1.0.5`
+- Manifest version: `1.0.8`
+- Current folder name: `Liangyi_Design_Assistant-1.0.8`
 
 ## 许可 / License
 
