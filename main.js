@@ -663,9 +663,12 @@ function getMainPanelHTML() {
                                 <sp-label>参考图</sp-label>
                                 <sp-body id="referenceCountText" size="S">0/8</sp-body>
                             </section>
-                            <sp-body class="info-text">点击“+”添加当前 Photoshop 画布；不添加参考图也可以发送请求。</sp-body>
+                            <sp-body class="info-text">点击“+”上传当前画布；或点击上传本地图像；鼠标悬浮到“+”上方后“按Ctrl+V”可以粘贴上传</sp-body>
                             <section id="referenceList" class="reference-list"></section>
-                            <section class="button-row">
+                            <section class="button-row reference-actions">
+                                <sp-button id="uploadReferencesButton" variant="secondary">
+                                    <sp-label>上传参考图</sp-label>
+                                </sp-button>
                                 <sp-button id="clearReferencesButton" variant="secondary">
                                     <sp-label>清空</sp-label>
                                 </sp-button>
@@ -797,7 +800,7 @@ function getMainPanelHTML() {
                                 <sp-label>参考图</sp-label>
                                 <sp-body id="imageReverseImageCount" size="S">0/8</sp-body>
                             </section>
-                            <sp-body class="info-text">点击“+”添加当前 Photoshop 画布；不添加参考图也可以发送请求。</sp-body>
+                            <sp-body class="info-text">点击“+”上传当前画布；或点击上传本地图像；鼠标悬浮到“+”上方后“按Ctrl+V”可以粘贴上传</sp-body>
                             <section id="imageReverseImageList" class="reference-list">
                                 <section class="reference-cell reference-add-cell">
                                     <sp-button id="imageReverseAddButton" class="reference-add-tile" variant="secondary">
@@ -806,8 +809,11 @@ function getMainPanelHTML() {
                                     </sp-button>
                                 </section>
                             </section>
-                            <section class="button-row">
-                                <sp-button id="imageReverseClearImagesButton" variant="secondary" disabled>
+                            <section class="button-row reference-actions">
+                                <sp-button id="imageReverseUploadImagesButton" variant="secondary">
+                                    <sp-label>上传参考图</sp-label>
+                                </sp-button>
+                                <sp-button id="imageReverseClearImagesButton" variant="secondary">
                                     <sp-label>清空</sp-label>
                                 </sp-button>
                             </section>
@@ -1067,6 +1073,8 @@ entrypoints.setup({
                     loadScript('src/modules/fontModule.js'),
                     loadScript('src/modules/translateModule.js'),
                     loadScript('src/modules/guidesModule.js'),
+                    loadScript('src/modules/photoshopImageTarget.js'),
+                    loadScript('src/modules/photoshopPasteReference.js'),
                     loadScript('src/modules/aiAssistantModule.js'),
                     loadScript('src/modules/imageReverseModule.js'),
                     loadScript('src/modules/panel.js')
@@ -1091,6 +1099,11 @@ entrypoints.setup({
                             console.error('[HaimatiPanel] AI 助手模块初始化失败', error);
                         }
                     }
+                    try {
+                        await window.LiangyiPhotoshopPaste.start();
+                    } catch (error) {
+                        console.error("[HaimatiPanel] Photoshop 粘贴事件监听失败，可点击 + 读取画布", error);
+                    }
                 });
             },
             show(rootNode) {
@@ -1101,9 +1114,11 @@ entrypoints.setup({
             },
             hide(rootNode) {
                 console.log('[HaimatiPanel] 隐藏面板');
+                if (window.LiangyiPhotoshopPaste) window.LiangyiPhotoshopPaste.resetTarget();
             },
             destroy(rootNode) {
                 console.log('[HaimatiPanel] 销毁面板');
+                if (window.LiangyiPhotoshopPaste) window.LiangyiPhotoshopPaste.stop().catch(console.error);
                 if (typeof window.cleanupPanel === 'function') {
                     window.cleanupPanel();
                 }

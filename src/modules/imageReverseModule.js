@@ -250,6 +250,13 @@ function renderImages() {
     addButton.id = "imageReverseAddButton";
     addButton.className = "reference-add-tile";
     addButton.setAttribute("variant", "secondary");
+    if (window.LiangyiPhotoshopPaste) {
+      window.LiangyiPhotoshopPaste.bind(addButton, {
+        canAdd: () => !captureInProgress && images.length < MAX_IMAGES,
+        acceptImage: acceptPastedReference,
+        setStatus
+      });
+    }
     addButton.disabled = captureInProgress;
     addButton.addEventListener("click", addCurrentCanvasReference);
 
@@ -267,13 +274,17 @@ function renderImages() {
     list.appendChild(wrapper);
   }
 
+  const uploadButton = element("imageReverseUploadImagesButton");
+  if (uploadButton) {
+    uploadButton.disabled = captureInProgress || images.length >= MAX_IMAGES;
+  }
   count.textContent = `${images.length}/${MAX_IMAGES}`;
   if (clearButton) {
-    clearButton.disabled = images.length === 0;
+    clearButton.disabled = captureInProgress;
   }
 }
 
-async function captureCurrentCanvasReference() {
+async function captureCurrentCanvasReference(expectedDocumentId) {
   if (!app.documents.length) {
     throw new Error("添加参考图前，请先打开 Photoshop 文档。");
   }
@@ -281,49 +292,116 @@ async function captureCurrentCanvasReference() {
     throw new Error(`最多只能添加 ${MAX_IMAGES} 张参考图。`);
   }
 
-  const activeDocument = app.activeDocument;
-  const tempFolder = await storage.localFileSystem.getTemporaryFolder();
-  referenceFileSequence += 1;
-  const file = await tempFolder.createFile(
-    `liangyi-reference-${Date.now()}-${referenceFileSequence}.jpg`,
-    { overwrite: true }
-  );
-
-  await core.executeAsModal(async () => {
-    await activeDocument.saveAs.jpg(file, { quality: 10 }, true);
-  }, { commandName: "Capture reverse reference image" });
-
-  const bytes = await file.read({ format: storage.formats.binary });
-  try {
-    await file.delete();
-  } catch (error) {
-    // Temporary cleanup failure is non-fatal.
+  const imageTarget = window.LiangyiPhotoshopImageTarget;
+  if (!imageTarget) {
+    throw new Error("Photoshop 选区读取模块尚未加载。");
   }
-
+  referenceFileSequence += 1;
+  const capture = await imageTarget.captureReference({
+    expectedDocumentId,
+    fileNameSuffix: `${Date.now()}-${referenceFileSequence}`,
+    quality: 10,
+    commandName: "添加反推画布或选区参考图"
+  });
   return {
-    name: activeDocument.title || `reference-${images.length + 1}.jpg`,
-    mimeType: "image/jpeg",
-    base64: arrayBufferToBase64(bytes),
-    previewUrl: URL.createObjectURL(new Blob([bytes], { type: "image/jpeg" }))
+    name: `${capture.documentName}-${capture.target}.jpg`,
+    mimeType: capture.mimeType,
+    target: capture.target,
+    targetLabel: capture.targetLabel,
+    targetBounds: capture.targetBounds,
+    base64: arrayBufferToBase64(capture.bytes),
+    previewUrl: URL.createObjectURL(new Blob([capture.bytes], { type: capture.mimeType }))
   };
 }
 
-async function addCurrentCanvasReference() {
+async function addCurrentCanvasReference(expectedDocumentId) {
   if (captureInProgress) {
     return;
   }
   captureInProgress = true;
   renderImages();
-  setStatus("正在获取当前 Photoshop 画布…");
+  setStatus("正在获取当前 Photoshop 选区或画布…");
   try {
-    const reference = await captureCurrentCanvasReference();
+    const reference = await captureCurrentCanvasReference(expectedDocumentId);
     images.push(reference);
     renderImages();
-    setStatus(`已添加当前画布：${images.length}/${MAX_IMAGES}`);
+    setStatus(`已添加当前${reference.targetLabel}：${images.length}/${MAX_IMAGES}`);
   } catch (error) {
     setStatus(`添加参考图失败：${error.message}`);
   } finally {
     captureInProgress = false;
+    renderImages();
+  }
+}
+
+function acceptPastedReference(image) {
+  if (captureInProgress || images.length >= MAX_IMAGES) return false;
+  const reference = {
+    name: image.name,
+    mimeType: image.mimeType,
+    base64: arrayBufferToBase64(image.bytes),
+    previewUrl: URL.createObjectURL(new Blob([image.bytes], { type: image.mimeType }))
+  };
+  images.push(reference);
+  try {
+    renderImages();
+    return true;
+  } catch (error) {
+    images.pop();
+    URL.revokeObjectURL(reference.previewUrl);
+    throw error;
+  }
+}
+
+async function uploadReferenceImages() {
+  if (captureInProgress) {
+    return;
+  }
+  if (images.length >= MAX_IMAGES) {
+    setStatus(`最多只能添加 ${MAX_IMAGES} 张参考图。`);
+    return;
+  }
+  captureInProgress = true;
+  
+  renderImages();
+  const pending = [];
+  try {
+    const files = await storage.localFileSystem.getFileForOpening({
+      allowMultiple: true,
+      types: ["png;*.jpg;*.jpeg;*.webp"]
+    });
+    if (!files || !files.length) {
+      return;
+    }
+    if (files.length > MAX_IMAGES - images.length) {
+      throw new Error(`最多只能添加 ${MAX_IMAGES} 张参考图，当前还可添加 ${MAX_IMAGES - images.length} 张，请重新选择。`);
+    }
+    for (const file of files) {
+      const extension = file.name.split(".").pop().toLowerCase();
+      const mimeType = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp" }[extension];
+      if (!mimeType) {
+        throw new Error(`不支持的图像格式：${file.name}`);
+      }
+      const bytes = await file.read({ format: storage.formats.binary });
+      if (!bytes.byteLength) {
+        throw new Error(`图像文件为空：${file.name}`);
+      }
+      pending.push({
+        name: file.name,
+        mimeType,
+        base64: arrayBufferToBase64(bytes),
+        previewUrl: URL.createObjectURL(new Blob([bytes], { type: mimeType }))
+      });
+    }
+    images.push(...pending);
+    pending.length = 0;
+    setStatus(`已上传 ${files.length} 张参考图：${images.length}/${MAX_IMAGES}`);
+  } catch (error) {
+    pending.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+    setStatus(`上传参考图失败：${error.message}`);
+  } finally {
+    captureInProgress = false;
+    
     renderImages();
   }
 }
@@ -814,6 +892,7 @@ async function startReverse() {
 }
 
 function bindEvents() {
+  element("imageReverseUploadImagesButton").addEventListener("click", uploadReferenceImages);
   element("imageReverseClearImagesButton").addEventListener("click", () => {
     clearImages();
     setStatus("已清空参考图。");

@@ -165,6 +165,16 @@
     padding: 0;
 }
 
+.ai-assistant-panel .interface-action-menu {
+    flex-direction: row;
+    flex-wrap: nowrap;
+}
+
+.ai-assistant-panel .interface-action-menu sp-button {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
 .ai-assistant-panel .interface-form {
     align-items: stretch;
 }
@@ -436,13 +446,17 @@
 .ai-assistant-panel #generateButton,
 .ai-assistant-panel #exportCurrentButton,
 .ai-assistant-panel #exportAllButton,
+.ai-assistant-panel #pullModelsButton,
 .ai-assistant-panel #editInterfaceButton,
 .ai-assistant-panel #deleteInterfaceButton,
 .ai-assistant-panel #cancelInterfaceActionButton,
 .ai-assistant-panel #saveInterfaceButton,
 .ai-assistant-panel #cancelInterfaceButton,
+.ai-assistant-panel #uploadReferencesButton,
+.ai-assistant-panel #imageReverseUploadImagesButton,
 .ai-assistant-panel #clearReferencesButton,
 .ai-assistant-panel #imageReverseClearImagesButton,
+.ai-assistant-panel #imageReverseClearResultButton,
 .ai-assistant-panel #deleteCurrentResultButton,
 .ai-assistant-panel #clearResultsButton {
     display: flex;
@@ -455,13 +469,17 @@
 .ai-assistant-panel #generateButton::part(button),
 .ai-assistant-panel #exportCurrentButton::part(button),
 .ai-assistant-panel #exportAllButton::part(button),
+.ai-assistant-panel #pullModelsButton::part(button),
 .ai-assistant-panel #editInterfaceButton::part(button),
 .ai-assistant-panel #deleteInterfaceButton::part(button),
 .ai-assistant-panel #cancelInterfaceActionButton::part(button),
 .ai-assistant-panel #saveInterfaceButton::part(button),
 .ai-assistant-panel #cancelInterfaceButton::part(button),
+.ai-assistant-panel #uploadReferencesButton::part(button),
+.ai-assistant-panel #imageReverseUploadImagesButton::part(button),
 .ai-assistant-panel #clearReferencesButton::part(button),
 .ai-assistant-panel #imageReverseClearImagesButton::part(button),
+.ai-assistant-panel #imageReverseClearResultButton::part(button),
 .ai-assistant-panel #deleteCurrentResultButton::part(button),
 .ai-assistant-panel #clearResultsButton::part(button) {
     display: flex;
@@ -474,13 +492,17 @@
 .ai-assistant-panel #generateButton sp-label,
 .ai-assistant-panel #exportCurrentButton sp-label,
 .ai-assistant-panel #exportAllButton sp-label,
+.ai-assistant-panel #pullModelsButton sp-label,
 .ai-assistant-panel #editInterfaceButton sp-label,
 .ai-assistant-panel #deleteInterfaceButton sp-label,
 .ai-assistant-panel #cancelInterfaceActionButton sp-label,
 .ai-assistant-panel #saveInterfaceButton sp-label,
 .ai-assistant-panel #cancelInterfaceButton sp-label,
+.ai-assistant-panel #uploadReferencesButton sp-label,
+.ai-assistant-panel #imageReverseUploadImagesButton sp-label,
 .ai-assistant-panel #clearReferencesButton sp-label,
 .ai-assistant-panel #imageReverseClearImagesButton sp-label,
+.ai-assistant-panel #imageReverseClearResultButton sp-label,
 .ai-assistant-panel #deleteCurrentResultButton sp-label,
 .ai-assistant-panel #clearResultsButton sp-label {
     display: flex;
@@ -494,13 +516,17 @@
 .ai-assistant-panel #generateButton:not([disabled]),
 .ai-assistant-panel #exportCurrentButton:not([disabled]),
 .ai-assistant-panel #exportAllButton:not([disabled]),
+.ai-assistant-panel #pullModelsButton:not([disabled]),
 .ai-assistant-panel #editInterfaceButton:not([disabled]),
 .ai-assistant-panel #deleteInterfaceButton:not([disabled]),
 .ai-assistant-panel #cancelInterfaceActionButton:not([disabled]),
 .ai-assistant-panel #saveInterfaceButton:not([disabled]),
 .ai-assistant-panel #cancelInterfaceButton:not([disabled]),
+.ai-assistant-panel #uploadReferencesButton:not([disabled]),
+.ai-assistant-panel #imageReverseUploadImagesButton:not([disabled]),
 .ai-assistant-panel #clearReferencesButton:not([disabled]),
 .ai-assistant-panel #imageReverseClearImagesButton:not([disabled]),
+.ai-assistant-panel #imageReverseClearResultButton:not([disabled]),
 .ai-assistant-panel #deleteCurrentResultButton:not([disabled]),
 .ai-assistant-panel #clearResultsButton:not([disabled]) {
     cursor: pointer;
@@ -509,25 +535,33 @@
 .ai-assistant-panel #generateButton:not([disabled])::part(button),
 .ai-assistant-panel #exportCurrentButton:not([disabled])::part(button),
 .ai-assistant-panel #exportAllButton:not([disabled])::part(button),
+.ai-assistant-panel #pullModelsButton:not([disabled])::part(button),
 .ai-assistant-panel #editInterfaceButton:not([disabled])::part(button),
 .ai-assistant-panel #deleteInterfaceButton:not([disabled])::part(button),
 .ai-assistant-panel #cancelInterfaceActionButton:not([disabled])::part(button),
 .ai-assistant-panel #saveInterfaceButton:not([disabled])::part(button),
 .ai-assistant-panel #cancelInterfaceButton:not([disabled])::part(button),
+.ai-assistant-panel #uploadReferencesButton:not([disabled])::part(button),
+.ai-assistant-panel #imageReverseUploadImagesButton:not([disabled])::part(button),
 .ai-assistant-panel #clearReferencesButton:not([disabled])::part(button),
 .ai-assistant-panel #imageReverseClearImagesButton:not([disabled])::part(button),
+.ai-assistant-panel #imageReverseClearResultButton:not([disabled])::part(button),
 .ai-assistant-panel #deleteCurrentResultButton:not([disabled])::part(button),
 .ai-assistant-panel #clearResultsButton:not([disabled])::part(button) {
     cursor: pointer;
 }
 
+.ai-assistant-panel #pullModelsButton,
 .ai-assistant-panel #editInterfaceButton,
 .ai-assistant-panel #deleteInterfaceButton,
 .ai-assistant-panel #cancelInterfaceActionButton,
 .ai-assistant-panel #saveInterfaceButton,
 .ai-assistant-panel #cancelInterfaceButton,
+.ai-assistant-panel #uploadReferencesButton,
+.ai-assistant-panel #imageReverseUploadImagesButton,
 .ai-assistant-panel #clearReferencesButton,
 .ai-assistant-panel #imageReverseClearImagesButton,
+.ai-assistant-panel #imageReverseClearResultButton,
 .ai-assistant-panel #deleteCurrentResultButton,
 .ai-assistant-panel #clearResultsButton {
     min-height: 30px;
@@ -543,13 +577,17 @@
     user-select: none;
 }
 
+.ai-assistant-panel #pullModelsButton::part(button),
 .ai-assistant-panel #editInterfaceButton::part(button),
 .ai-assistant-panel #deleteInterfaceButton::part(button),
 .ai-assistant-panel #cancelInterfaceActionButton::part(button),
 .ai-assistant-panel #saveInterfaceButton::part(button),
 .ai-assistant-panel #cancelInterfaceButton::part(button),
+.ai-assistant-panel #uploadReferencesButton::part(button),
+.ai-assistant-panel #imageReverseUploadImagesButton::part(button),
 .ai-assistant-panel #clearReferencesButton::part(button),
 .ai-assistant-panel #imageReverseClearImagesButton::part(button),
+.ai-assistant-panel #imageReverseClearResultButton::part(button),
 .ai-assistant-panel #deleteCurrentResultButton::part(button),
 .ai-assistant-panel #clearResultsButton::part(button) {
     min-height: 30px;
@@ -572,6 +610,9 @@
     border-color: var(--accent) !important;
 }
 
+.ai-assistant-panel #uploadReferencesButton:hover:not([disabled]),
+.ai-assistant-panel #imageReverseUploadImagesButton:hover:not([disabled]),
+.ai-assistant-panel #pullModelsButton:hover:not([disabled]),
 .ai-assistant-panel #editInterfaceButton:hover:not([disabled]),
 .ai-assistant-panel #deleteInterfaceButton:hover:not([disabled]),
 .ai-assistant-panel #cancelInterfaceActionButton:hover:not([disabled]),
@@ -582,6 +623,9 @@
     border-color: var(--accent) !important;
 }
 
+.ai-assistant-panel #uploadReferencesButton:hover:not([disabled])::part(button),
+.ai-assistant-panel #imageReverseUploadImagesButton:hover:not([disabled])::part(button),
+.ai-assistant-panel #pullModelsButton:hover:not([disabled])::part(button),
 .ai-assistant-panel #editInterfaceButton:hover:not([disabled])::part(button),
 .ai-assistant-panel #deleteInterfaceButton:hover:not([disabled])::part(button),
 .ai-assistant-panel #cancelInterfaceActionButton:hover:not([disabled])::part(button),
@@ -592,6 +636,9 @@
     border-color: var(--accent) !important;
 }
 
+.ai-assistant-panel #uploadReferencesButton:active:not([disabled]),
+.ai-assistant-panel #imageReverseUploadImagesButton:active:not([disabled]),
+.ai-assistant-panel #pullModelsButton:active:not([disabled]),
 .ai-assistant-panel #editInterfaceButton:active:not([disabled]),
 .ai-assistant-panel #deleteInterfaceButton:active:not([disabled]),
 .ai-assistant-panel #cancelInterfaceActionButton:active:not([disabled]),
@@ -601,6 +648,9 @@
     border-color: var(--accent) !important;
 }
 
+.ai-assistant-panel #uploadReferencesButton:active:not([disabled])::part(button),
+.ai-assistant-panel #imageReverseUploadImagesButton:active:not([disabled])::part(button),
+.ai-assistant-panel #pullModelsButton:active:not([disabled])::part(button),
 .ai-assistant-panel #editInterfaceButton:active:not([disabled])::part(button),
 .ai-assistant-panel #deleteInterfaceButton:active:not([disabled])::part(button),
 .ai-assistant-panel #cancelInterfaceActionButton:active:not([disabled])::part(button),
@@ -616,9 +666,17 @@
 }
 
 .ai-assistant-panel #clearReferencesButton:hover:not([disabled]),
+.ai-assistant-panel #clearReferencesButton:hover:not([disabled])::part(button),
 .ai-assistant-panel #clearReferencesButton:focus:not([disabled]),
+.ai-assistant-panel #clearReferencesButton:focus:not([disabled])::part(button),
 .ai-assistant-panel #imageReverseClearImagesButton:hover:not([disabled]),
+.ai-assistant-panel #imageReverseClearResultButton:hover:not([disabled]),
+.ai-assistant-panel #imageReverseClearImagesButton:hover:not([disabled])::part(button),
+.ai-assistant-panel #imageReverseClearResultButton:hover:not([disabled])::part(button),
 .ai-assistant-panel #imageReverseClearImagesButton:focus:not([disabled]),
+.ai-assistant-panel #imageReverseClearResultButton:focus:not([disabled]),
+.ai-assistant-panel #imageReverseClearImagesButton:focus:not([disabled])::part(button),
+.ai-assistant-panel #imageReverseClearResultButton:focus:not([disabled])::part(button),
 .ai-assistant-panel #clearResultsButton:hover:not([disabled]),
 .ai-assistant-panel #clearResultsButton:focus:not([disabled]) {
     color: #fff !important;
@@ -628,7 +686,11 @@
 }
 
 .ai-assistant-panel #clearReferencesButton:active:not([disabled]),
+.ai-assistant-panel #clearReferencesButton:active:not([disabled])::part(button),
 .ai-assistant-panel #imageReverseClearImagesButton:active:not([disabled]),
+.ai-assistant-panel #imageReverseClearResultButton:active:not([disabled]),
+.ai-assistant-panel #imageReverseClearImagesButton:active:not([disabled])::part(button),
+.ai-assistant-panel #imageReverseClearResultButton:active:not([disabled])::part(button),
 .ai-assistant-panel #clearResultsButton:active:not([disabled]) {
     color: #fff !important;
     background: var(--danger) !important;
@@ -639,8 +701,11 @@
 .ai-assistant-panel #generateButton[disabled],
 .ai-assistant-panel #exportCurrentButton[disabled],
 .ai-assistant-panel #exportAllButton[disabled],
+.ai-assistant-panel #uploadReferencesButton[disabled],
+.ai-assistant-panel #imageReverseUploadImagesButton[disabled],
 .ai-assistant-panel #clearReferencesButton[disabled],
 .ai-assistant-panel #imageReverseClearImagesButton[disabled],
+.ai-assistant-panel #imageReverseClearResultButton[disabled],
 .ai-assistant-panel #clearResultsButton[disabled] {
     cursor: default;
 }
@@ -790,3 +855,21 @@
     color: #c02038;
     background: transparent;
 }
+
+.ai-assistant-panel .reference-actions {
+    flex-wrap: nowrap;
+}
+
+.ai-assistant-panel .reference-actions sp-button {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.ai-assistant-panel .reference-actions sp-button:hover:not([disabled]) {
+    opacity: 0.96;
+}
+
+.ai-assistant-panel .reference-actions sp-button:active:not([disabled]) {
+    opacity: 0.82;
+}
+

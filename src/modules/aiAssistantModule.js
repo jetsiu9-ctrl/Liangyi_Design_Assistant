@@ -62,6 +62,7 @@ let lastResultLinks = [];
 let currentResultIndex = 0;
 let currentPreviewUrl = "";
 let referenceImages = [];
+let referenceAddInProgress = false;
 let activeGenerationCount = 0;
 let resultFileSequence = 0;
 let generationStatusSequence = 0;
@@ -208,6 +209,7 @@ function finishGenerationStatus(timeoutState, message) {
 function setBusy(isBusy) {
   element("generateButton").disabled = isBusy;
   element("clearReferencesButton").disabled = isBusy;
+  element("uploadReferencesButton").disabled = isBusy || referenceAddInProgress || referenceImages.length >= MAX_REFERENCE_IMAGES;
   updateResultButtons(isBusy);
   element("interfacePicker").disabled = isBusy;
   element("addInterfaceButton").disabled = isBusy;
@@ -287,7 +289,11 @@ function normalizeEndpointPreferences(value) {
 }
 
 function normalizeInterface(item, index) {
-  const imageModels = normalizeModelNames(item?.imageModels);
+  const cachedModels = normalizeModelNames([
+    ...normalizeModelNames(item?.imageModels),
+    ...normalizeModelNames(item?.reverseModels)
+  ]);
+  const imageModels = cachedModels.filter(isImageGenerationModel);
   const requestedImageModel = String(item?.imageModel || "").trim();
   return {
     id: String(item?.id || createInterfaceId()),
@@ -389,13 +395,20 @@ function getCurrentImageModels() {
   return normalizeModelNames(getCurrentInterface().imageModels);
 }
 
-function isGeminiModel(model) {
-  return String(model || "").toLowerCase().includes("gemini");
+function matchesImageProvider(model, provider) {
+  const name = String(model || "").toLowerCase();
+  if (provider === "gemini") {
+    return (name.includes("image") && name.includes("gemini")) || name.includes("banana");
+  }
+  return name.includes("gpt") && name.includes("image") && !name.includes("gemini");
+}
+
+function isImageGenerationModel(model) {
+  return matchesImageProvider(model, "openai") || matchesImageProvider(model, "gemini");
 }
 
 function getImageModelsForProvider(provider) {
-  const isGeminiProvider = provider === "gemini";
-  return getCurrentImageModels().filter((model) => isGeminiModel(model) === isGeminiProvider);
+  return getCurrentImageModels().filter((model) => matchesImageProvider(model, provider));
 }
 
 function getSelectedImageModelName() {
@@ -965,7 +978,7 @@ async function pullModelsForCurrentInterface() {
     throw new Error("接口没有返回可识别的模型名称。");
   }
 
-  const imageModels = models.filter((model) => model.toLowerCase().includes("image"));
+  const imageModels = models.filter(isImageGenerationModel);
   const reverseModels = models.filter((model) => !model.toLowerCase().includes("image"));
   current.imageModels = imageModels;
   current.reverseModels = reverseModels;
@@ -1101,7 +1114,7 @@ async function pollTask(taskId, timeoutState) {
   throw new Error("图像任务查询超时。");
 }
 
-async function captureCurrentCanvasReference() {
+async function captureCurrentCanvasReference(expectedDocumentId) {
   if (!app.documents.length) {
     throw new Error("添加参考图前，请先打开 Photoshop 文档。");
   }
@@ -1109,39 +1122,116 @@ async function captureCurrentCanvasReference() {
     throw new Error(`最多只能添加 ${MAX_REFERENCE_IMAGES} 张参考图。`);
   }
 
-  const activeDocument = app.activeDocument;
-  const tempFolder = await storage.localFileSystem.getTemporaryFolder();
-  const file = await tempFolder.createFile(`liangyi-reference-${Date.now()}.jpg`, { overwrite: true });
-
-  await core.executeAsModal(async () => {
-    await activeDocument.saveAs.jpg(file, { quality: 10 }, true);
-  }, { commandName: "Capture reference image" });
-
-  const bytes = await file.read({ format: storage.formats.binary });
-  try {
-    await file.delete();
-  } catch (error) {
-    // Temporary cleanup failure is non-fatal.
+  const imageTarget = window.LiangyiPhotoshopImageTarget;
+  if (!imageTarget) {
+    throw new Error("Photoshop 选区读取模块尚未加载。");
   }
-
-  const blob = new Blob([bytes], { type: "image/jpeg" });
+  const capture = await imageTarget.captureReference({
+    expectedDocumentId,
+    quality: 10,
+    commandName: "添加画布或选区参考图"
+  });
+  const blob = new Blob([capture.bytes], { type: capture.mimeType });
   return {
-    bytes,
-    name: activeDocument.title || `reference-${referenceImages.length + 1}.jpg`,
+    bytes: capture.bytes,
+    mimeType: capture.mimeType,
+    name: `${capture.documentName}-${capture.target}.jpg`,
+    target: capture.target,
+    targetLabel: capture.targetLabel,
+    targetBounds: capture.targetBounds,
     url: URL.createObjectURL(blob)
   };
 }
 
-async function addCurrentCanvasReference() {
+async function addCurrentCanvasReference(expectedDocumentId) {
+  if (referenceAddInProgress) {
+    return;
+  }
+  referenceAddInProgress = true;
   setBusy(true);
+  renderReferences();
   try {
-    setStatus("正在获取当前画布...");
-    const reference = await captureCurrentCanvasReference();
+    setStatus("正在获取当前选区或画布...");
+    const reference = await captureCurrentCanvasReference(expectedDocumentId);
     referenceImages.push(reference);
     renderReferences();
-    setStatus(`已添加参考图：${referenceImages.length}/${MAX_REFERENCE_IMAGES}`);
+    setStatus(`已添加当前${reference.targetLabel}为参考图：${referenceImages.length}/${MAX_REFERENCE_IMAGES}`);
   } finally {
+    referenceAddInProgress = false;
     setBusy(false);
+    renderReferences();
+  }
+}
+
+function acceptPastedReference(image) {
+  if (referenceAddInProgress || referenceImages.length >= MAX_REFERENCE_IMAGES) return false;
+  const reference = {
+    name: image.name,
+    mimeType: image.mimeType,
+    bytes: image.bytes,
+    url: URL.createObjectURL(new Blob([image.bytes], { type: image.mimeType }))
+  };
+  referenceImages.push(reference);
+  try {
+    renderReferences();
+    return true;
+  } catch (error) {
+    referenceImages.pop();
+    URL.revokeObjectURL(reference.url);
+    throw error;
+  }
+}
+
+async function uploadReferenceImages() {
+  if (referenceAddInProgress) {
+    return;
+  }
+  if (referenceImages.length >= MAX_REFERENCE_IMAGES) {
+    setStatus(`最多只能添加 ${MAX_REFERENCE_IMAGES} 张参考图。`);
+    return;
+  }
+  referenceAddInProgress = true;
+  setBusy(true);
+  renderReferences();
+  const pending = [];
+  try {
+    const files = await storage.localFileSystem.getFileForOpening({
+      allowMultiple: true,
+      types: ["png;*.jpg;*.jpeg;*.webp"]
+    });
+    if (!files || !files.length) {
+      return;
+    }
+    if (files.length > MAX_REFERENCE_IMAGES - referenceImages.length) {
+      throw new Error(`最多只能添加 ${MAX_REFERENCE_IMAGES} 张参考图，当前还可添加 ${MAX_REFERENCE_IMAGES - referenceImages.length} 张，请重新选择。`);
+    }
+    for (const file of files) {
+      const extension = file.name.split(".").pop().toLowerCase();
+      const mimeType = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp" }[extension];
+      if (!mimeType) {
+        throw new Error(`不支持的图像格式：${file.name}`);
+      }
+      const bytes = await file.read({ format: storage.formats.binary });
+      if (!bytes.byteLength) {
+        throw new Error(`图像文件为空：${file.name}`);
+      }
+      pending.push({
+        name: file.name,
+        mimeType,
+        bytes,
+        url: URL.createObjectURL(new Blob([bytes], { type: mimeType }))
+      });
+    }
+    referenceImages.push(...pending);
+    pending.length = 0;
+    setStatus(`已上传 ${files.length} 张参考图：${referenceImages.length}/${MAX_REFERENCE_IMAGES}`);
+  } catch (error) {
+    pending.forEach((item) => URL.revokeObjectURL(item.url));
+    setStatus(`上传参考图失败：${error.message}`);
+  } finally {
+    referenceAddInProgress = false;
+    setBusy(false);
+    renderReferences();
   }
 }
 
@@ -1169,6 +1259,7 @@ function clearReferenceImages() {
 }
 
 function renderReferences() {
+  element("uploadReferencesButton").disabled = referenceAddInProgress || referenceImages.length >= MAX_REFERENCE_IMAGES;
   const list = element("referenceList");
   list.textContent = "";
   element("referenceCountText").textContent = `${referenceImages.length}/${MAX_REFERENCE_IMAGES}`;
@@ -1215,7 +1306,15 @@ function renderReferences() {
 
     const addButton = document.createElement("sp-button");
     addButton.className = "reference-add-tile";
+    addButton.disabled = referenceAddInProgress;
     addButton.setAttribute("variant", "secondary");
+    if (window.LiangyiPhotoshopPaste) {
+      window.LiangyiPhotoshopPaste.bind(addButton, {
+        canAdd: () => !referenceAddInProgress && referenceImages.length < MAX_REFERENCE_IMAGES,
+        acceptImage: acceptPastedReference,
+        setStatus
+      });
+    }
     addButton.addEventListener("click", async () => {
       try {
         await addCurrentCanvasReference();
@@ -1277,7 +1376,7 @@ async function submitTextToImage(prompt, timeoutState) {
     form.append("prompt", prompt);
     appendCommonFormFields(form);
     referenceImages.forEach((item, index) => {
-      form.append("image", new Blob([item.bytes], { type: "image/jpeg" }), `reference_${index + 1}.jpg`);
+      form.append("image", new Blob([item.bytes], { type: item.mimeType || "image/jpeg" }), `reference_${index + 1}.${({ "image/png": "png", "image/webp": "webp" })[item.mimeType] || "jpg"}`);
     });
     return requestJson(apiUrl("/v1/images/generations", useAsync ? { async: "true" } : {}), {
       method: "POST",
@@ -1296,7 +1395,7 @@ async function submitTextToImage(prompt, timeoutState) {
 
 async function submitImageEdit(prompt, timeoutState) {
   if (!referenceImages.length) {
-    throw new Error("使用 Edits 请求接口前，请至少添加一张当前画布参考图。");
+    throw new Error("使用 Edits 请求接口前，请至少添加一张参考图。");
   }
 
   const model = getModelValue();
@@ -1307,7 +1406,7 @@ async function submitImageEdit(prompt, timeoutState) {
   setStatus(`正在通过 Edits 提交请求：模型 ${model}，尺寸 ${getActualSize()}`);
 
   referenceImages.forEach((item, index) => {
-    form.append("image", new Blob([item.bytes], { type: "image/jpeg" }), `reference_${index + 1}.jpg`);
+    form.append("image", new Blob([item.bytes], { type: item.mimeType || "image/jpeg" }), `reference_${index + 1}.${({ "image/png": "png", "image/webp": "webp" })[item.mimeType] || "jpg"}`);
   });
 
   const useAsync = Boolean(element("asyncCheckbox").checked);
@@ -1332,7 +1431,7 @@ async function submitGeminiImage(prompt, images, timeoutState) {
     parts.push({
       inlineData: {
         data: arrayBufferToBase64(item.bytes),
-        mimeType: "image/jpeg"
+        mimeType: item.mimeType || "image/jpeg"
       }
     });
   });
@@ -1624,51 +1723,23 @@ async function showAdjacentResult(offset) {
   await showResultPreview(currentResultIndex + offset);
 }
 
-function numericValue(value) {
-  if (typeof value === "number") {
-    return value;
-  }
-  if (value && typeof value.value === "number") {
-    return value.value;
-  }
-  return Number(value) || 0;
-}
-
 async function insertFilesIntoPhotoshop(files) {
   await core.executeAsModal(async () => {
     const activeDocument = app.documents.length ? app.activeDocument : null;
+    const imageTarget = window.LiangyiPhotoshopImageTarget;
+    if (activeDocument && !imageTarget) {
+      throw new Error("Photoshop 图像定位模块尚未加载。");
+    }
+    const target = activeDocument ? await imageTarget.getPlacementTarget(activeDocument) : null;
     for (let index = 0; index < files.length; index += 1) {
       const file = files[index];
       if (!activeDocument) {
         await app.open(file);
         continue;
       }
-
-      const fileToken = await storage.localFileSystem.createSessionToken(file);
-      await action.batchPlay([{
-        _obj: "placeEvent",
-        "null": { _path: fileToken, _kind: "local" }
-      }], { synchronousExecution: true });
-
-      const newLayer = activeDocument.activeLayers && activeDocument.activeLayers[0];
-      if (!newLayer || !newLayer.bounds) {
-        continue;
-      }
-      newLayer.name = `${RESULT_LAYER_NAME_PREFIX}${index + 1}`;
-
-      const bounds = newLayer.bounds;
-      const boundsWidth = numericValue(bounds.right) - numericValue(bounds.left);
-      const boundsHeight = numericValue(bounds.bottom) - numericValue(bounds.top);
-      const docWidth = numericValue(activeDocument.width);
-      const docHeight = numericValue(activeDocument.height);
-      if (boundsWidth <= 0 || boundsHeight <= 0 || docWidth <= 0 || docHeight <= 0) {
-        continue;
-      }
-
-      const scalePercent = Math.max(docWidth / boundsWidth, docHeight / boundsHeight) * 100;
-      await newLayer.scale(scalePercent, scalePercent);
-      const newBounds = newLayer.bounds;
-      await newLayer.translate(-numericValue(newBounds.left), -numericValue(newBounds.top));
+      await imageTarget.placeFile(activeDocument, file, target, {
+        layerName: `${RESULT_LAYER_NAME_PREFIX}${index + 1}`
+      });
     }
   }, { commandName: "插入生成图像" });
 }
@@ -1959,6 +2030,7 @@ function bindEvents() {
     }
   });
 
+  element("uploadReferencesButton").addEventListener("click", uploadReferenceImages);
   element("clearReferencesButton").addEventListener("click", () => {
     clearReferenceImages();
     setStatus("参考图已清空。");

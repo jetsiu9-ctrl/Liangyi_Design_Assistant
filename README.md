@@ -89,12 +89,14 @@ For development and debugging:
 - 批量重命名前，请先选中需要处理的图层，并检查预览结果。
 - 字体管理会使用 Photoshop 当前可用字体集合。
 - 百度翻译需要先填写并保存百度翻译开放平台的 APP ID 与 API KEY。
-- AI 图像生成需要先在连接设置中配置接口地址和密钥。可右键“当前接口”或选择两个模型下拉框顶部固定的“一键获取模型”来拉取模型；名称中包含 `image`（不区分大小写）的模型会加入图像生成列表，其余模型会加入图像反推列表。两个模块会再按接口类型筛选下拉列表：Gemini 仅显示名称中包含 `gemini` 的模型，OpenAI 兼容仅显示其他模型。两个模块不再内置默认模型。
+- AI 图像生成需要先在连接设置中配置接口地址和密钥。可右键“当前接口”或选择两个模型下拉框顶部固定的“一键获取模型”来拉取模型。生图模型按名称筛选（不区分大小写）：OpenAI 兼容仅显示同时包含 `gpt` 和 `image` 且不包含 `gemini` 的模型；Gemini 仅显示同时包含 `image` 和 `gemini`，或者包含 `banana` 的模型。图像反推仍使用名称不包含 `image` 的模型，并按是否包含 `gemini` 分别显示在 Gemini 和 OpenAI 兼容列表中。两个模块不再内置默认模型。
 - 图像生成支持 OpenAI 兼容和 Gemini 两种接口类型。OpenAI 兼容模式可明确选择 `Generations` 或 `Edits`：前者支持文生图及中转站兼容的参考图生图，后者要求至少一张参考图；Gemini 统一使用 `generateContent`。
 - 可在 AI 连接设置中选择生成图像保存目录；生成结果保留临时预览的同时，会额外保存一份永久副本。
+- 生成结果导出到 Photoshop 时优先使用当前选区外接矩形，没有选区时使用整个画布；图像会等比完整容纳在目标矩形中，并按目标中心定位。
 - AI 连接设置支持自定义任务超时时长；保存目录、接口和超时设置会保存在 `liangyi-ai-settings.json` 中。
 - 图像反推支持 OpenAI/Gemini 请求格式、接口拉取模型、自定义模型，以及“反推 / 编辑 / 不使用预设”三种提示词模式。
-- 图像反推参考图通过“+”抓取当前 Photoshop 画布；参考图不是必填项，可连续提交多个独立请求。
+- 图像生成与图像反推的“+”会优先抓取当前 Photoshop 选区的外接矩形，且不会取消源文档选区；没有选区时抓取整个画布。参考图不是必填项，可连续提交多个独立请求。
+- 将图像粘贴到 Photoshop 作为参考图时，上传成功后会回到粘贴前的历史状态，从而移除临时粘贴图层并恢复原有选区，包括不规则、羽化和多块选区。
 - 每个反推请求都会在状态区域实时显示已用时间和超时上限；文本结果可在插件内查看并复制。
 - 同一次插件会话中的反推结果会按完成顺序保留，可使用上一条/下一条切换，并支持复制当前、删除当前和清空全部。
 
@@ -110,9 +112,11 @@ English:
 - AI Image Generation requires an endpoint and API key in Connection Settings. Pull models by right-clicking the current endpoint or choosing the fixed `Fetch Models` action at the top of either model picker. Names containing `image` (case-insensitive) are added to Image Generation, while all remaining names are added to Image Reverse. Each module then filters its picker by interface type: Gemini shows only model names containing `gemini`, while OpenAI-compatible mode shows all other models. Neither module includes built-in default models.
 - Image Generation supports OpenAI-compatible and Gemini request types. OpenAI-compatible requests explicitly use either `Generations` or `Edits`: Generations supports text-only generation and relay-compatible reference-image generation, while Edits requires at least one reference image. Gemini uses `generateContent`.
 - Choose an image output folder in the AI connection settings to keep a permanent copy while retaining the temporary preview workflow.
+- When generated results are exported to Photoshop, the current selection bounds are preferred and the full canvas is used as fallback. Images are proportionally contained and centered inside that target rectangle.
 - AI connection settings include a persistent task timeout. Output folder, endpoint, and timeout preferences are stored in `liangyi-ai-settings.json`.
 - Image Reverse supports OpenAI/Gemini request formats, interface-provided models, custom models, and Reverse/Edit/No Preset prompt modes.
-- Use the “+” tile to capture the current Photoshop canvas as a reference. A reference is optional, and multiple independent requests can run concurrently.
+- The “+” tile in Image Generation and Image Reverse first captures the current Photoshop selection bounds without clearing the source selection, and falls back to the full canvas when no selection exists. References are optional, and multiple independent requests can run concurrently.
+- When a pasted Photoshop layer is used as a reference, a successful upload returns the document to its exact pre-paste history state, removing the temporary pasted layer and restoring irregular, feathered, or multi-part selections.
 - Each reverse request reports elapsed time and its timeout limit in the status area. Returned text can be reviewed and copied inside the plugin.
 - Reverse results are retained in completion order for the current plugin session, with Previous/Next navigation plus Copy Current, Delete Current, and Clear All actions.
 
