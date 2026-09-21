@@ -933,33 +933,42 @@ function getMainPanelHTML() {
                             <sp-body id="generationTimeoutStatus" class="info-text ai-setting-help" size="S">保存后将用于后续启动的生图任务。</sp-body>
                         </section>
 
-                        <sp-label for="interfacePicker">当前接口</sp-label>
+                        <sp-label class="ai-setting-label" for="interfacePicker">当前接口</sp-label>
                         <section id="interfacePickerRow" class="interface-picker-row">
-                            <sp-picker id="interfacePicker">
-                                <sp-menu id="interfacePickerMenu" slot="options"></sp-menu>
-                            </sp-picker>
+                            <sp-action-button id="interfacePicker" class="interface-picker-trigger" quiet
+                                title="点击展开接口列表；在列表中右键某个接口，可拉取模型、编辑或删除">
+                                <sp-label id="interfacePickerLabel">当前接口</sp-label>
+                                <sp-label class="interface-picker-caret">▾</sp-label>
+                            </sp-action-button>
                             <sp-action-button id="addInterfaceButton" class="interface-add-button" quiet title="添加接口">
                                 <sp-label>+</sp-label>
                             </sp-action-button>
                         </section>
-                        <sp-body class="info-text interface-help-text" size="S">点击"+"添加接口；右键下拉框可拉取模型、编辑或删除</sp-body>
+                        <sp-body class="info-text interface-help-text" size="S">点击展开接口列表；在列表中右键某个接口，即可拉取模型、编辑或删除。</sp-body>
 
-                        <section id="interfaceActionMenu" class="interface-action-menu is-hidden">
-                            <sp-button id="pullModelsButton" variant="secondary">
-                                <sp-label>拉取模型</sp-label>
-                            </sp-button>
-                            <sp-button id="editInterfaceButton" variant="secondary">
-                                <sp-label>编辑</sp-label>
-                            </sp-button>
-                            <sp-button id="deleteInterfaceButton" variant="secondary">
-                                <sp-label>删除</sp-label>
-                            </sp-button>
-                            <sp-button id="cancelInterfaceActionButton" variant="secondary">
-                                <sp-label>取消</sp-label>
-                            </sp-button>
+                        <section id="interfacePickerPopup" class="interface-picker-popup is-hidden">
+                            <sp-menu id="interfacePickerMenu" class="interface-picker-menu is-hidden"></sp-menu>
+                            <section id="interfaceActionMenu" class="interface-action-menu is-hidden" role="menu">
+                                <sp-label id="interfaceActionTarget" class="interface-action-target"></sp-label>
+                                <section class="interface-action-row">
+                                    <sp-button id="pullModelsButton" variant="secondary">
+                                        <sp-label>拉取模型</sp-label>
+                                    </sp-button>
+                                    <sp-button id="editInterfaceButton" variant="secondary">
+                                        <sp-label>编辑</sp-label>
+                                    </sp-button>
+                                    <sp-button id="deleteInterfaceButton" variant="negative">
+                                        <sp-label>删除</sp-label>
+                                    </sp-button>
+                                    <sp-button id="cancelInterfaceActionButton" class="interface-action-quiet">
+                                        <sp-label>取消</sp-label>
+                                    </sp-button>
+                                </section>
+                            </section>
                         </section>
 
                         <section id="interfaceForm" class="interface-form is-hidden">
+                            <sp-heading id="interfaceFormTitle" size="XS">新增接口</sp-heading>
                             <sp-label for="interfaceNameInput">名称</sp-label>
                             <sp-textfield id="interfaceNameInput"></sp-textfield>
 

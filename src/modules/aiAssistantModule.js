@@ -56,6 +56,10 @@ let settings = {
   generationTimeoutSeconds: DEFAULT_GENERATION_TIMEOUT_SECONDS
 };
 let editingInterfaceId = "";
+let contextInterfaceId = "";
+let suppressInterfaceTriggerClick = false;
+let suppressInterfaceOptionClick = false;
+let cancelPendingInterfaceClick = false;
 let outputFolderEntry = null;
 let lastResultFiles = [];
 let lastResultLinks = [];
@@ -215,12 +219,12 @@ function setBusy(isBusy) {
   element("addInterfaceButton").disabled = isBusy;
   element("pullModelsButton").disabled = isBusy;
   element("editInterfaceButton").disabled = isBusy;
-  element("deleteInterfaceButton").disabled = isBusy;
   element("cancelInterfaceActionButton").disabled = isBusy;
   element("saveInterfaceButton").disabled = isBusy;
   element("cancelInterfaceButton").disabled = isBusy;
   element("selectOutputFolderButton").disabled = isBusy;
   element("saveGenerationSettingsButton").disabled = isBusy;
+  updateInterfaceActionAvailability();
 }
 
 function setActiveModule(moduleName) {
@@ -289,11 +293,7 @@ function normalizeEndpointPreferences(value) {
 }
 
 function normalizeInterface(item, index) {
-  const cachedModels = normalizeModelNames([
-    ...normalizeModelNames(item?.imageModels),
-    ...normalizeModelNames(item?.reverseModels)
-  ]);
-  const imageModels = cachedModels.filter(isImageGenerationModel);
+  const imageModels = normalizeModelNames(item?.imageModels);
   const requestedImageModel = String(item?.imageModel || "").trim();
   return {
     id: String(item?.id || createInterfaceId()),
@@ -376,19 +376,132 @@ function applyCurrentInterfaceToFields() {
 
 function renderInterfacePicker() {
   const menu = element("interfacePickerMenu");
+  if (!menu) {
+    return;
+  }
   menu.textContent = "";
   settings.interfaces.forEach((item) => {
     const menuItem = document.createElement("sp-menu-item");
     menuItem.setAttribute("value", item.id);
+    menuItem.setAttribute("data-interface-id", item.id);
     if (item.id === settings.currentInterfaceId) {
       menuItem.setAttribute("selected", "");
     }
     const label = document.createElement("sp-label");
     label.textContent = item.name;
     menuItem.appendChild(label);
+    bindInterfaceOptionEvents(menuItem, item.id);
     menu.appendChild(menuItem);
   });
-  setPickerValue("interfacePicker", settings.currentInterfaceId);
+  const pickerLabel = element("interfacePickerLabel");
+  if (pickerLabel) {
+    pickerLabel.textContent = getCurrentInterface().name;
+  }
+}
+
+function findInterfaceOption(interfaceId) {
+  const menu = element("interfacePickerMenu");
+  if (!menu) {
+    return null;
+  }
+  const items = Array.from(menu.querySelectorAll("sp-menu-item"));
+  return items.find((item) => (
+    String(item.getAttribute("data-interface-id") || "") === String(interfaceId)
+  )) || null;
+}
+
+function isInterfaceBusy() {
+  const trigger = element("interfacePicker");
+  return !!(trigger && trigger.disabled);
+}
+
+function isInterfacePickerOpen() {
+  const popup = element("interfacePickerPopup");
+  return !!popup && !popup.classList.contains("is-hidden");
+}
+
+function isInterfaceFormOpen() {
+  const form = element("interfaceForm");
+  return !!form && !form.classList.contains("is-hidden");
+}
+
+function interfacePickerRowContains(target) {
+  const row = element("interfacePickerRow");
+  if (!row || !target) {
+    return false;
+  }
+  return row === target || row.contains(target);
+}
+
+function getContextTargetInterface() {
+  return settings.interfaces.find((item) => item.id === contextInterfaceId) || getCurrentInterface();
+}
+
+function recordSecondaryPress(state) {
+  return (event) => {
+    state.secondary = event?.button === 2 || event?.buttons === 2;
+  };
+}
+
+function bindInterfaceOptionEvents(menuItem, optionId) {
+  const press = { secondary: false };
+  const recordPress = recordSecondaryPress(press);
+  menuItem.addEventListener("pointerdown", recordPress);
+  menuItem.addEventListener("mousedown", recordPress);
+  menuItem.addEventListener("blur", () => {});
+
+  menuItem.addEventListener("contextmenu", (event) => {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    if (!isInterfacePickerOpen() || isInterfaceBusy() || isInterfaceFormOpen()) {
+      return;
+    }
+    openInterfaceActionMenu(optionId);
+  });
+
+  menuItem.addEventListener("click", (event) => {
+    if (suppressInterfaceOptionClick) {
+      suppressInterfaceOptionClick = false;
+      press.secondary = false;
+      return;
+    }
+    const isSecondary = event?.button === 2 || press.secondary;
+    press.secondary = false;
+    if (isSecondary || !isInterfacePickerOpen() || isInterfaceBusy() || isInterfaceFormOpen()) {
+      return;
+    }
+    return scheduleInterfaceSelection(optionId);
+  });
+
+  menuItem.addEventListener("keydown", (event) => {
+    const key = event?.key;
+    if (key !== "Enter" && key !== " " && key !== "Spacebar") {
+      return;
+    }
+    event?.preventDefault?.();
+    if (!isInterfacePickerOpen() || isInterfaceBusy() || isInterfaceFormOpen()) {
+      return;
+    }
+    suppressInterfaceOptionClick = true;
+    return scheduleInterfaceSelection(optionId);
+  });
+}
+
+function scheduleInterfaceSelection(optionId) {
+  cancelPendingInterfaceClick = false;
+  return new Promise((resolve) => {
+    setTimeout(async () => {
+      if (cancelPendingInterfaceClick) {
+        resolve();
+        return;
+      }
+      try {
+        await selectInterface(optionId);
+      } finally {
+        resolve();
+      }
+    }, 0);
+  });
 }
 
 function getCurrentImageModels() {
@@ -401,10 +514,6 @@ function matchesImageProvider(model, provider) {
     return (name.includes("image") && name.includes("gemini")) || name.includes("banana");
   }
   return name.includes("gpt") && name.includes("image") && !name.includes("gemini");
-}
-
-function isImageGenerationModel(model) {
-  return matchesImageProvider(model, "openai") || matchesImageProvider(model, "gemini");
 }
 
 function getImageModelsForProvider(provider) {
@@ -476,21 +585,155 @@ function notifyModelConsumers() {
 }
 
 function hideInterfaceActionMenu() {
-  element("interfaceActionMenu").classList.add("is-hidden");
+  const menu = element("interfaceActionMenu");
+  if (menu) {
+    menu.classList.add("is-hidden");
+  }
 }
 
-function showInterfaceActionMenu() {
+function hideInterfacePicker() {
+  const popup = element("interfacePickerPopup");
+  const list = element("interfacePickerMenu");
+  if (popup) {
+    popup.classList.add("is-hidden");
+  }
+  if (list) {
+    list.classList.add("is-hidden");
+  }
+  hideInterfaceActionMenu();
+}
+
+function getViewportHeight() {
+  if (typeof window !== "undefined") {
+    if (Number.isFinite(window.innerHeight) && window.innerHeight > 0) {
+      return window.innerHeight;
+    }
+    if (window.screen && Number.isFinite(window.screen.availHeight) && window.screen.availHeight > 0) {
+      return window.screen.availHeight;
+    }
+  }
+  return 800;
+}
+
+function positionInterfacePickerPopup() {
+  const trigger = element("interfacePicker");
+  const popup = element("interfacePickerPopup");
+  const list = element("interfacePickerMenu");
+  if (!trigger || !popup || !list) {
+    return;
+  }
+  const gap = 6;
+  const triggerRect = trigger.getBoundingClientRect();
+  const width = triggerRect.width || popup.getBoundingClientRect().width || 240;
+  popup.style.left = `${triggerRect.left}px`;
+  popup.style.width = `${width}px`;
+  const listHeight = list.getBoundingClientRect().height || 0;
+  const spaceBelow = getViewportHeight() - triggerRect.bottom;
+  const spaceAbove = triggerRect.top;
+  let top = triggerRect.bottom + gap;
+  if (spaceBelow < listHeight + gap && spaceAbove > spaceBelow) {
+    top = Math.max(gap, triggerRect.top - listHeight - gap);
+  }
+  popup.style.top = `${top}px`;
+}
+
+function openInterfacePicker() {
+  const popup = element("interfacePickerPopup");
+  const list = element("interfacePickerMenu");
+  if (!popup || !list) {
+    return;
+  }
+  hideInterfaceActionMenu();
+  popup.classList.remove("is-hidden");
+  list.classList.remove("is-hidden");
+  positionInterfacePickerPopup();
+}
+
+function positionInterfaceActionMenu(optionEl) {
+  const popup = element("interfacePickerPopup");
+  const list = element("interfacePickerMenu");
+  const menu = element("interfaceActionMenu");
+  if (!popup || !list || !menu || !optionEl) {
+    return;
+  }
+  const popupRect = popup.getBoundingClientRect();
+  const listRect = list.getBoundingClientRect();
+  const optionRect = optionEl.getBoundingClientRect();
+  const popupWidth = popupRect.width || listRect.width || 0;
+  const listHeight = listRect.height || 0;
+  const menuWidth = Math.max(0, Math.min(listRect.width || popupWidth, popupWidth));
+  menu.style.width = `${menuWidth}px`;
+  const menuHeight = menu.getBoundingClientRect().height || 0;
+  const optionTop = optionRect.top - listRect.top;
+  const optionLeft = optionRect.left - listRect.left;
+  const optionHeight = optionRect.height || 0;
+  let top = optionTop - menuHeight - 2;
+  if (top < 0) {
+    top = optionTop + optionHeight + 2;
+  }
+  top = Math.max(0, Math.min(top, Math.max(0, listHeight - menuHeight)));
+  const left = Math.max(0, Math.min(optionLeft, Math.max(0, popupWidth - menuWidth)));
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+}
+
+function updateInterfaceActionAvailability() {
+  const deleteButton = element("deleteInterfaceButton");
+  if (deleteButton) {
+    deleteButton.disabled = isInterfaceBusy() || settings.interfaces.length <= 1;
+  }
+}
+
+function openInterfaceActionMenu(interfaceId) {
+  const target = settings.interfaces.find((item) => item.id === interfaceId);
+  if (!target) {
+    return;
+  }
+  cancelPendingInterfaceClick = true;
   hideInterfaceForm();
-  element("interfaceActionMenu").classList.remove("is-hidden");
+  contextInterfaceId = target.id;
+
+  const menu = element("interfaceActionMenu");
+  const targetLabel = element("interfaceActionTarget");
+  if (targetLabel) {
+    targetLabel.textContent = `接口：${target.name}`;
+  }
+  if (menu) {
+    menu.setAttribute("aria-label", `接口：${target.name}`);
+  }
+
+  const list = element("interfacePickerMenu");
+  if (list) {
+    Array.from(list.querySelectorAll("sp-menu-item")).forEach((item) => {
+      item.classList.remove("is-context-target");
+    });
+  }
+  const optionEl = findInterfaceOption(target.id);
+  if (optionEl) {
+    optionEl.classList.add("is-context-target");
+  }
+
+  if (menu) {
+    menu.classList.remove("is-hidden");
+    positionInterfaceActionMenu(optionEl);
+  }
+  updateInterfaceActionAvailability();
 }
 
 function hideInterfaceForm() {
   editingInterfaceId = "";
-  element("interfaceForm").classList.add("is-hidden");
+  const form = element("interfaceForm");
+  if (form) {
+    form.classList.add("is-hidden");
+  }
 }
 
 function showInterfaceForm(interfaceId) {
-  hideInterfaceActionMenu();
+  const form = element("interfaceForm");
+  if (!form) {
+    return;
+  }
+  hideInterfacePicker();
   const item = interfaceId
     ? settings.interfaces.find((entry) => entry.id === interfaceId)
     : null;
@@ -498,7 +741,11 @@ function showInterfaceForm(interfaceId) {
   element("interfaceNameInput").value = item ? item.name : "";
   element("interfaceBaseUrlInput").value = item ? item.baseUrl : DEFAULT_BASE_URL;
   element("interfaceApiKeyInput").value = item ? item.apiKey : "";
-  element("interfaceForm").classList.remove("is-hidden");
+  const title = element("interfaceFormTitle");
+  if (title) {
+    title.textContent = item ? `编辑接口：${item.name}` : "新增接口";
+  }
+  form.classList.remove("is-hidden");
 }
 
 function apiUrl(path, query) {
@@ -802,22 +1049,27 @@ async function saveSettings() {
 }
 
 async function selectInterface(interfaceId) {
-  if (!settings.interfaces.some((item) => item.id === interfaceId)) {
+  const target = settings.interfaces.find((item) => item.id === interfaceId);
+  if (!target) {
     return;
   }
   syncCurrentInterfaceFromFields();
-  settings.currentInterfaceId = interfaceId;
+  settings.currentInterfaceId = target.id;
+  contextInterfaceId = "";
   applyCurrentInterfaceToFields();
   renderInterfacePicker();
   applyImageGenerationPreferences();
-  hideInterfaceActionMenu();
-  hideInterfaceForm();
+  hideInterfacePicker();
   await persistSettings();
   notifyModelConsumers();
-  setStatus(`已切换接口：${getCurrentInterface().name}`);
+  setStatus(`已切换接口：${target.name}`);
 }
 
 async function saveInterfaceFromForm() {
+  const form = element("interfaceForm");
+  if (!form || form.classList.contains("is-hidden")) {
+    return;
+  }
   const name = String(element("interfaceNameInput").value || "").trim();
   const baseUrl = normalizeBaseUrl(element("interfaceBaseUrlInput").value);
   const apiKey = String(element("interfaceApiKeyInput").value || "").trim();
@@ -828,7 +1080,8 @@ async function saveInterfaceFromForm() {
   let item = editingInterfaceId
     ? settings.interfaces.find((entry) => entry.id === editingInterfaceId)
     : null;
-  if (!item) {
+  const isNewInterface = !item;
+  if (isNewInterface) {
     item = normalizeInterface({
       id: createInterfaceId(),
       name,
@@ -842,30 +1095,41 @@ async function saveInterfaceFromForm() {
     item.apiKey = apiKey;
   }
 
-  settings.currentInterfaceId = item.id;
-  applyCurrentInterfaceToFields();
+  if (isNewInterface || item.id === settings.currentInterfaceId) {
+    settings.currentInterfaceId = item.id;
+    applyCurrentInterfaceToFields();
+    applyImageGenerationPreferences();
+  }
   hideInterfaceForm();
   renderInterfacePicker();
-  applyImageGenerationPreferences();
   await persistSettings();
   notifyModelConsumers();
   setStatus(`已保存接口：${item.name}`);
 }
 
-async function deleteCurrentInterface() {
+async function deleteInterface(interfaceId) {
+  const target = settings.interfaces.find((item) => item.id === interfaceId);
+  if (!target) {
+    return;
+  }
   if (settings.interfaces.length <= 1) {
     throw new Error("至少需要保留一个接口。");
   }
-  const current = getCurrentInterface();
-  settings.interfaces = settings.interfaces.filter((item) => item.id !== current.id);
-  settings.currentInterfaceId = settings.interfaces[0].id;
-  applyCurrentInterfaceToFields();
-  renderInterfacePicker();
-  applyImageGenerationPreferences();
+  const wasCurrent = target.id === settings.currentInterfaceId;
+  settings.interfaces = settings.interfaces.filter((item) => item.id !== target.id);
+  if (wasCurrent) {
+    settings.currentInterfaceId = settings.interfaces[0].id;
+    applyCurrentInterfaceToFields();
+    applyImageGenerationPreferences();
+  }
+  if (contextInterfaceId === target.id) {
+    contextInterfaceId = "";
+  }
   hideInterfaceActionMenu();
+  renderInterfacePicker();
   await persistSettings();
   notifyModelConsumers();
-  setStatus(`已删除接口：${current.name}`);
+  setStatus(`已删除接口：${target.name}`);
 }
 
 function requestHeaders(contentType) {
@@ -952,17 +1216,31 @@ function extractModelNames(data) {
   return normalizeModelNames(names);
 }
 
-async function pullModelsForCurrentInterface() {
-  syncCurrentInterfaceFromFields();
-  const current = getCurrentInterface();
-  setStatus(`正在从 ${current.name} 拉取模型...`);
+function buildModelsUrl(target) {
+  const baseUrl = normalizeBaseUrl(target?.baseUrl);
+  return new URL(`${baseUrl}/v1/models`).toString();
+}
+
+function interfaceRequestHeaders(target, contentType) {
+  const headers = {
+    Authorization: `Bearer ${String(target?.apiKey || "").trim()}`
+  };
+  if (contentType) {
+    headers["Content-Type"] = contentType;
+  }
+  return headers;
+}
+
+async function pullModelsForInterface(target) {
+  const interfaceItem = target || getCurrentInterface();
+  setStatus(`正在从 ${interfaceItem.name} 拉取模型...`);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), MODEL_PULL_TIMEOUT_MS);
   let data;
   try {
-    data = await requestJson(apiUrl("/v1/models"), {
+    data = await requestJson(buildModelsUrl(interfaceItem), {
       method: "GET",
-      headers: requestHeaders(),
+      headers: interfaceRequestHeaders(interfaceItem),
       signal: controller.signal
     });
   } catch (error) {
@@ -978,12 +1256,17 @@ async function pullModelsForCurrentInterface() {
     throw new Error("接口没有返回可识别的模型名称。");
   }
 
-  const imageModels = models.filter(isImageGenerationModel);
+  const imageModels = models.filter((model) => model.toLowerCase().includes("image"));
   const reverseModels = models.filter((model) => !model.toLowerCase().includes("image"));
-  current.imageModels = imageModels;
-  current.reverseModels = reverseModels;
-  renderImageModelPicker(current.imageModel);
-  setPickerValue("imageEndpointPicker", getSavedImageEndpoint(getSelectedImageModelName()));
+  interfaceItem.imageModels = imageModels;
+  interfaceItem.reverseModels = reverseModels;
+  if (!imageModels.includes(interfaceItem.imageModel)) {
+    interfaceItem.imageModel = imageModels[0] || "";
+  }
+  if (interfaceItem.id === settings.currentInterfaceId) {
+    renderImageModelPicker(interfaceItem.imageModel);
+    setPickerValue("imageEndpointPicker", getSavedImageEndpoint(getSelectedImageModelName()));
+  }
   hideInterfaceActionMenu();
   await persistSettings();
   notifyModelConsumers();
@@ -997,14 +1280,14 @@ async function pullModelsForCurrentInterface() {
   };
 }
 
-function pullModelsWithUi() {
+function pullModelsWithUi(target) {
   if (modelPullPromise) {
     return modelPullPromise;
   }
   modelPullPromise = (async () => {
     setBusy(true);
     try {
-      return await pullModelsForCurrentInterface();
+      return await pullModelsForInterface(target || getCurrentInterface());
     } finally {
       setBusy(false);
       modelPullPromise = null;
@@ -1892,51 +2175,65 @@ function bindEvents() {
     }
   });
 
-  const syncInterfacePicker = () => {
-    setTimeout(async () => {
-      try {
-        const nextId = readPickerDomValue(element("interfacePicker"));
-        if (nextId && nextId !== settings.currentInterfaceId) {
-          await selectInterface(nextId);
-        }
-      } catch (error) {
-        setStatus(error.message);
-      }
-    }, 0);
-  };
+  const interfaceTrigger = element("interfacePicker");
+  const interfaceTriggerPress = { secondary: false };
+  const recordInterfaceTriggerPress = recordSecondaryPress(interfaceTriggerPress);
 
-  element("interfacePicker").addEventListener("change", syncInterfacePicker);
-  element("interfacePicker").addEventListener("input", syncInterfacePicker);
+  interfaceTrigger.addEventListener("pointerdown", recordInterfaceTriggerPress);
+  interfaceTrigger.addEventListener("mousedown", recordInterfaceTriggerPress);
 
-  element("interfacePicker").addEventListener("contextmenu", (event) => {
-    event.preventDefault();
-    showInterfaceActionMenu();
+  interfaceTrigger.addEventListener("keydown", (event) => {
+    const key = event?.key;
+    if (key !== "Enter" && key !== " " && key !== "Spacebar") {
+      return;
+    }
+    event?.preventDefault?.();
+    if (interfaceTrigger.disabled) {
+      return;
+    }
+    suppressInterfaceTriggerClick = true;
+    openInterfacePicker();
   });
 
-  element("interfacePickerRow").addEventListener("contextmenu", (event) => {
-    event.preventDefault();
-    showInterfaceActionMenu();
+  interfaceTrigger.addEventListener("click", (event) => {
+    if (suppressInterfaceTriggerClick) {
+      suppressInterfaceTriggerClick = false;
+      return;
+    }
+    const isSecondary = event?.button === 2 || interfaceTriggerPress.secondary;
+    interfaceTriggerPress.secondary = false;
+    if (isSecondary || interfaceTrigger.disabled) {
+      return;
+    }
+    if (isInterfacePickerOpen()) {
+      hideInterfacePicker();
+    } else {
+      openInterfacePicker();
+    }
   });
 
   element("addInterfaceButton").addEventListener("click", () => {
+    if (isInterfaceBusy()) {
+      return;
+    }
     showInterfaceForm("");
   });
 
   element("pullModelsButton").addEventListener("click", async () => {
     try {
-      await pullModelsWithUi();
+      await pullModelsWithUi(getContextTargetInterface());
     } catch (error) {
       setStatus(`模型拉取失败：${error.message}`);
     }
   });
 
   element("editInterfaceButton").addEventListener("click", () => {
-    showInterfaceForm(settings.currentInterfaceId);
+    showInterfaceForm(getContextTargetInterface().id);
   });
 
   element("deleteInterfaceButton").addEventListener("click", async () => {
     try {
-      await deleteCurrentInterface();
+      await deleteInterface(getContextTargetInterface().id);
     } catch (error) {
       setStatus(error.message);
     }
@@ -1956,6 +2253,44 @@ function bindEvents() {
 
   element("cancelInterfaceButton").addEventListener("click", () => {
     hideInterfaceForm();
+  });
+
+  element("interfacePickerMenu").addEventListener("scroll", () => {
+    hideInterfaceActionMenu();
+  });
+
+  const mainContentNode = element("mainContent");
+  if (mainContentNode) {
+    mainContentNode.addEventListener("scroll", () => {
+      hideInterfacePicker();
+    });
+  }
+
+  document.addEventListener("click", (event) => {
+    const popup = element("interfacePickerPopup");
+    if (!popup || popup.classList.contains("is-hidden")) {
+      return;
+    }
+    const target = event?.target;
+    if (target && popup.contains(target)) {
+      return;
+    }
+    if (target && interfacePickerRowContains(target)) {
+      return;
+    }
+    hideInterfacePicker();
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event?.key !== "Escape") {
+      return;
+    }
+    const actionMenu = element("interfaceActionMenu");
+    if (actionMenu && !actionMenu.classList.contains("is-hidden")) {
+      hideInterfaceActionMenu();
+      return;
+    }
+    hideInterfacePicker();
   });
 
   const syncImageProvider = () => {

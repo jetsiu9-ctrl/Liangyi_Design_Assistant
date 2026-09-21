@@ -464,3 +464,26 @@ test('a subsequent click-only selection still works after cancelling a submenu',
   await h.option('b').fire('click', { button: undefined });
   assert.equal(h.state().currentInterfaceId, 'b');
 });
+
+test('opening the edit form closes the interface list so it cannot overlap the form', async () => {
+  const h = createHarness();
+  await h.open();
+  await h.option('b').fire('contextmenu');
+  await h.el('editInterfaceButton').fire('click');
+  assert.equal(h.el('interfacePickerPopup').classList.contains('is-hidden'), true);
+  assert.equal(h.el('interfacePickerMenu').classList.contains('is-hidden'), true);
+  assert.equal(h.el('interfaceActionMenu').classList.contains('is-hidden'), true);
+  assert.equal(h.el('interfaceForm').classList.contains('is-hidden'), false);
+  assert.equal(h.state().currentInterfaceId, 'a');
+  assert.equal(h.el('interfaceNameInput').value, '接口 B');
+});
+
+test('opening the add form from the plus button closes the interface list too', async () => {
+  const h = createHarness();
+  await h.open();
+  await h.el('addInterfaceButton').fire('click');
+  assert.equal(h.el('interfacePickerPopup').classList.contains('is-hidden'), true);
+  assert.equal(h.el('interfacePickerMenu').classList.contains('is-hidden'), true);
+  assert.equal(h.el('interfaceForm').classList.contains('is-hidden'), false);
+  assert.equal(h.el('interfaceFormTitle').textContent, '新增接口');
+});
