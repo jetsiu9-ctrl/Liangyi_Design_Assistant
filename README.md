@@ -89,7 +89,7 @@ For development and debugging:
 - 批量重命名前，请先选中需要处理的图层，并检查预览结果。
 - 字体管理会使用 Photoshop 当前可用字体集合。
 - 百度翻译需要先填写并保存百度翻译开放平台的 APP ID 与 API KEY。
-- AI 图像生成需要先在连接设置中配置接口地址和密钥。可右键“当前接口”或选择两个模型下拉框顶部固定的“一键获取模型”来拉取模型。生图模型按名称筛选（不区分大小写）：OpenAI 兼容仅显示同时包含 `gpt` 和 `image` 且不包含 `gemini` 的模型；Gemini 仅显示同时包含 `image` 和 `gemini`，或者包含 `banana` 的模型。图像反推仍使用名称不包含 `image` 的模型，并按是否包含 `gemini` 分别显示在 Gemini 和 OpenAI 兼容列表中。两个模块不再内置默认模型。
+- AI 图像生成需要先在连接设置中配置接口地址和密钥。在连接设置中点击“当前接口”展开接口列表，在列表中右键任意接口即可拉取模型、编辑或删除（按 Esc 或点击面板其他位置关闭菜单）；也可以使用两个模型下拉框顶部固定的“一键获取模型”拉取当前接口的模型。模型清单按接口分别保存，重载插件后不会丢失。生图模型按名称筛选（不区分大小写）：OpenAI 兼容仅显示同时包含 `gpt` 和 `image` 且不包含 `gemini` 的模型；Gemini 仅显示同时包含 `image` 和 `gemini`，或者包含 `banana` 的模型。图像反推仍使用名称不包含 `image` 的模型，并按是否包含 `gemini` 分别显示在 Gemini 和 OpenAI 兼容列表中。两个模块不再内置默认模型。
 - 图像生成支持 OpenAI 兼容和 Gemini 两种接口类型。OpenAI 兼容模式可明确选择 `Generations` 或 `Edits`：前者支持文生图及中转站兼容的参考图生图，后者要求至少一张参考图；Gemini 统一使用 `generateContent`。
 - 可在 AI 连接设置中选择生成图像保存目录；生成结果保留临时预览的同时，会额外保存一份永久副本。
 - 生成结果导出到 Photoshop 时优先使用当前选区外接矩形，没有选区时使用整个画布；图像会等比完整容纳在目标矩形中，并按目标中心定位。
@@ -109,7 +109,7 @@ English:
 - Select target layers and review the preview before running Batch Rename.
 - Font Management uses the font list currently available to Photoshop.
 - Baidu Translate requires saving your Baidu Translate APP ID and API KEY first.
-- AI Image Generation requires an endpoint and API key in Connection Settings. Pull models by right-clicking the current endpoint or choosing the fixed `Fetch Models` action at the top of either model picker. Names containing `image` (case-insensitive) are added to Image Generation, while all remaining names are added to Image Reverse. Each module then filters its picker by interface type: Gemini shows only model names containing `gemini`, while OpenAI-compatible mode shows all other models. Neither module includes built-in default models.
+- AI Image Generation requires an endpoint and API key in Connection Settings. Click the current endpoint in Connection Settings to open the list, then right-click any entry to pull models, edit, or delete it (press Escape or click elsewhere in the panel to dismiss the menu); the fixed `Fetch Models` action at the top of either model picker pulls models for the current entry. Model lists are stored per connection and survive a plugin reload. Names containing `image` (case-insensitive) are added to Image Generation, while all remaining names are added to Image Reverse. Each module then filters its picker by interface type: Gemini shows only model names containing `gemini`, while OpenAI-compatible mode shows all other models. Neither module includes built-in default models.
 - Image Generation supports OpenAI-compatible and Gemini request types. OpenAI-compatible requests explicitly use either `Generations` or `Edits`: Generations supports text-only generation and relay-compatible reference-image generation, while Edits requires at least one reference image. Gemini uses `generateContent`.
 - Choose an image output folder in the AI connection settings to keep a permanent copy while retaining the temporary preview workflow.
 - When generated results are exported to Photoshop, the current selection bounds are preferred and the full canvas is used as fallback. Images are proportionally contained and centered inside that target rectangle.
@@ -249,14 +249,14 @@ The current manifest declares permissions for document read/write, layer read/wr
 中文：
 
 - 插件 ID：`com.liangyi.designAssistant`
-- manifest 版本号：`1.0.8`
-- 当前目录名：`Liangyi_Design_Assistant-1.0.8`
+- manifest 版本号：`1.0.5`
+- 当前目录名：`Liangyi_Design_Assistant-1.0.5`
 
 English:
 
 - Plugin ID: `com.liangyi.designAssistant`
-- Manifest version: `1.0.8`
-- Current folder name: `Liangyi_Design_Assistant-1.0.8`
+- Manifest version: `1.0.5`
+- Current folder name: `Liangyi_Design_Assistant-1.0.5`
 
 ## 许可 / License
 

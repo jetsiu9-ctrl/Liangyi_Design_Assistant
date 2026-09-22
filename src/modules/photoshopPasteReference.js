@@ -3,11 +3,22 @@
 const { action, app, core, constants } = require("photoshop");
 const { storage } = require("uxp");
 const events = ["paste"];
+const TILE_CLASS = "reference-add-tile";
+const TILE_HINT = "点击优先读取当前选区，无选区时读取整个画布；也可把本地图片直接拖到这里；保持 Photoshop 画布焦点，悬浮于此按 Ctrl+V 可粘贴图层，上传成功后会撤销临时粘贴并恢复原选区";
+// 悬浮期间定期重拍快照：用户可能在这期间新建或删除图层，旧快照会让恢复历史跳错位置。
+const SNAPSHOT_REFRESH_MS = 1000;
+// 超过这个时长的快照不再可信，不能再用它的历史状态去恢复。
+const SNAPSHOT_TRUST_MS = 3000;
+// 指针移出面板时 relatedTarget 为 null、无法判定是否离开「+」，用空闲时长兜底。
+const HOVER_IDLE_MS = 30000;
 let hovered = null;
 let registration = null;
 let timer = null;
 let importing = false;
 let disposed = false;
+let panelPasteBound = false;
+// 已绑定监听的容器。用模块内列表记录而不是元素属性，避免标记被对象展开一并复制。
+const boundZones = [];
 
 function isVisible(tile) {
   if (tile.isConnected === false) return false;
@@ -19,6 +30,61 @@ function isVisible(tile) {
     }
   }
   return true;
+}
+
+function hasTileClass(node) {
+  return !!(node && node.classList && typeof node.classList.contains === "function" && node.classList.contains(TILE_CLASS));
+}
+
+// 监听挂在不会被重绘的容器上，所以必须判断事件落在「+」内部还是容器别处。
+// 合成事件没有 target 时按“在「+」上”处理，保持对旧式直接绑定按钮的兼容。
+function isAddTile(node, zone) {
+  if (hasTileClass(zone)) return true;
+  if (!node) return true;
+  for (let current = node; current && current !== zone; current = current.parentNode) {
+    if (hasTileClass(current)) return true;
+  }
+  return false;
+}
+
+// 「+」按钮每次重绘都会被重建，所以永远现取，不能缓存节点引用。
+function tileOf(target) {
+  if (!target) return null;
+  const resolve = typeof target.resolveTile === "function" ? target.resolveTile : () => target.tile;
+  try {
+    return resolve() || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function isEditable(node) {
+  for (let current = node; current && current !== document; current = current.parentNode) {
+    const tag = current.tagName ? String(current.tagName).toLowerCase() : "";
+    if (tag === "input" || tag === "textarea" || tag === "sp-textfield" || tag === "sp-textarea") return true;
+    if (current.isContentEditable) return true;
+  }
+  return false;
+}
+
+// E：把键盘焦点从面板推回 Photoshop，否则 Ctrl+V 根本到不了 PS。
+// 但正在输入的用户不该被打断，所以只对非输入类元素动手。
+function releasePanelFocus() {
+  try {
+    const active = document.activeElement;
+    if (!active || active === document.body) return;
+    if (isEditable(active)) return;
+    if (typeof active.blur === "function") active.blur();
+  } catch (_) {
+    // 焦点操作失败不影响粘贴本身。
+  }
+}
+
+// 焦点留在面板时 Photoshop 根本不会派发 paste 通知，用户只会觉得“按了没反应”。
+// 这里旁听面板内的 paste（不拦截、不阻止默认行为），明确告诉用户该先点一下画布。
+function onPanelPaste(event) {
+  if (disposed || !hovered || isEditable(event && event.target)) return;
+  hovered.setStatus("键盘焦点还在面板上，Photoshop 收不到这次粘贴。请先点击一下画布，再悬浮 + 按 Ctrl+V。");
 }
 
 
@@ -43,6 +109,7 @@ function snapshot(target) {
   if (!app.documents.length) { target.before = null; return; }
   const doc = app.activeDocument;
   target.before = {
+    at: Date.now(),
     documentId: doc.id,
     ids: new Set(allLayers(doc.layers).map(layer => layer.id)),
     historyState: activeHistoryState(doc)
@@ -109,11 +176,19 @@ async function importPastedLayer(target, documentId, layerId, restoreState) {
   let accepted = false;
   let cleaned = false;
   let selectionRestored = false;
+  let importStarted = false;
   try {
     const folder = await storage.localFileSystem.getTemporaryFolder();
     file = await folder.createFile("liangyi-pasted-layer-" + Date.now() + ".png", { overwrite: false });
+    // 导入期间锁住上传与拖入入口：它们会把 referenceAddInProgress 置真，导致下面 acceptImage 被拒，
+    // 而抛错点在画布恢复之前，粘贴的图层会残留在画布上。
+    if (typeof target.onImportStart === "function") {
+      target.onImportStart();
+      importStarted = true;
+    }
     await core.executeAsModal(async context => {
-      if (disposed || !target.canAdd() || !isVisible(target.tile)) throw new Error("面板状态已改变，已取消导入。");
+      const activeTile = tileOf(target);
+      if (disposed || !target.canAdd() || !activeTile || !isVisible(activeTile)) throw new Error("面板状态已改变，已取消导入。");
       if (!app.documents.length || app.activeDocument.id !== documentId) throw new Error("当前文档已切换，已取消导入。");
       const source = app.activeDocument;
       const layer = allLayers(source.layers).find(item => item.id === layerId);
@@ -182,6 +257,7 @@ async function importPastedLayer(target, documentId, layerId, restoreState) {
       ? "参考图已添加，但粘贴后的画布恢复未完全完成："
       : "粘贴图层导入失败，原图层已保留：") + (error.message || String(error)));
   } finally {
+    if (importStarted && typeof target.onImportEnd === "function") target.onImportEnd();
     if (file) {
       try { await file.delete(); } catch (_) { /* Temporary-file cleanup does not affect the imported image. */ }
     }
@@ -190,18 +266,34 @@ async function importPastedLayer(target, documentId, layerId, restoreState) {
 }
 
 function onPaste(eventName, descriptor) {
-  if (eventName !== "paste" || disposed || importing || !hovered) return;
+  if (eventName !== "paste" || disposed) return;
   if (descriptor && (descriptor._obj === "error" || descriptor.result < 0)) return;
+  if (importing) {
+    // 静默丢弃会让用户以为功能坏了，这里明确说明原因。
+    if (hovered) hovered.setStatus("正在导入上一张参考图，请稍候再按 Ctrl+V。");
+    return;
+  }
+  if (!hovered) return;
   const target = hovered;
-  if (target.tile.disabled || !isVisible(target.tile) || !target.canAdd()) return;
+  const tile = tileOf(target);
+  if (!tile || tile.disabled || !isVisible(tile) || !target.canAdd()) return;
+  // 指针移出面板时 relatedTarget 为 null、悬浮状态无法可靠清空，用空闲时长兜底。
+  if (Date.now() - (target.hoveredAt || Date.now()) > HOVER_IDLE_MS) {
+    hovered = null;
+    target.setStatus("悬浮状态已超时，请重新把鼠标移到 + 上再按 Ctrl+V。");
+    return;
+  }
   if (!app.documents.length) return;
   const currentId = app.activeDocument.id;
   const eventId = descriptor && descriptor.documentID;
   if (!Number.isFinite(currentId) || (Number.isFinite(eventId) && eventId !== currentId)) return;
-  // The hover snapshot is taken before Photoshop performs its native paste, so it is
-  // the most reliable state to restore. The post-paste lookup is only a fallback.
+  // 快照足够新时才用它的历史状态。过期快照会跳到悬浮那一刻，把用户之后的图层操作一并回滚。
   const before = target.before;
-  const restoreState = before && before.documentId === currentId && before.historyState
+  const trustworthy = before
+    && before.documentId === currentId
+    && before.at
+    && (Date.now() - before.at) <= SNAPSHOT_TRUST_MS;
+  const restoreState = trustworthy && before.historyState
     ? before.historyState
     : historyStateBeforePaste(app.activeDocument);
   let layerId;
@@ -219,7 +311,9 @@ function onPaste(eventName, descriptor) {
   timer = setTimeout(async () => {
     timer = null;
     try {
-      if (disposed || !isVisible(target.tile) || !target.canAdd()) return;
+      if (disposed || !target.canAdd()) return;
+      const activeTile = tileOf(target);
+      if (!activeTile || !isVisible(activeTile)) return;
       if (!app.documents.length || app.activeDocument.id !== currentId) {
         throw new Error("当前文档已切换，粘贴图层已保留，未导入或删除。");
       }
@@ -238,6 +332,10 @@ async function start() {
     return;
   }
   disposed = false;
+  if (!panelPasteBound && typeof document !== "undefined" && document && typeof document.addEventListener === "function") {
+    document.addEventListener("paste", onPanelPaste);
+    panelPasteBound = true;
+  }
   try {
     const result = action.addNotificationListener(events, onPaste);
     // Photoshop builds differ here: some return Promise<void>, while others
@@ -251,22 +349,54 @@ async function start() {
   }
 }
 
-function bind(tile, options) {
-  const target = { tile, ...options };
-  tile.setAttribute("title", "点击优先读取当前选区，无选区时读取整个画布；保持 Photoshop 画布焦点，悬浮于此按 Ctrl+V，上传成功后会撤销临时粘贴并恢复原选区");
-  const enter = () => {
-    if (!tile.disabled) {
-      if (hovered !== target) snapshot(target);
-      hovered = target;
-    }
+function bind(zone, options) {
+  if (!zone) return;
+  // 幂等：监听器挂在长期存在的容器上，重复绑定会叠加。
+  if (boundZones.indexOf(zone) !== -1) return;
+  boundZones.push(zone);
+
+  const settings = options || {};
+  const target = {
+    zone,
+    resolveTile: typeof settings.resolveTile === "function" ? settings.resolveTile : () => zone,
+    canAdd: settings.canAdd || (() => true),
+    acceptImage: settings.acceptImage,
+    setStatus: settings.setStatus || (() => {}),
+    onImportStart: typeof settings.onImportStart === "function" ? settings.onImportStart : null,
+    onImportEnd: typeof settings.onImportEnd === "function" ? settings.onImportEnd : null
   };
+
+  const tile = tileOf(target);
+  if (tile && tile.setAttribute) tile.setAttribute("title", TILE_HINT);
+
+  const enter = event => {
+    if (!isAddTile(event && event.target, zone)) return;
+    const active = tileOf(target);
+    if (active && active.disabled) return;
+    // E：趁悬浮把焦点从面板推回 Photoshop，否则 Ctrl+V 到不了 PS。
+    releasePanelFocus();
+    const now = Date.now();
+    if (hovered !== target || now - ((target.before && target.before.at) || 0) > SNAPSHOT_REFRESH_MS) {
+      snapshot(target);
+    }
+    target.hoveredAt = now;
+    hovered = target;
+  };
+
+  // 只有在真实 DOM 容器上才能可靠判断指针是否仍落在「+」内。
+  const domBound = !!(zone.classList && typeof zone.classList.contains === "function");
   const leave = event => {
-    if (event.relatedTarget && tile.contains(event.relatedTarget)) return;
+    const related = event && event.relatedTarget;
+    // 列表重绘会移除「+」，此时 relatedTarget 变成 null。若就此清空悬浮状态，
+    // 用户每次粘贴成功（都会重绘）后都得重新移动鼠标才能继续。
+    if (domBound && !related) return;
+    if (related && isAddTile(related, zone)) return;
     if (hovered === target) hovered = null;
   };
-  ["mouseenter", "mouseover", "mousemove", "pointerenter", "pointerover", "pointermove"].forEach(name => tile.addEventListener(name, enter));
-  ["mouseleave", "mouseout", "pointerleave", "pointerout"].forEach(name => tile.addEventListener(name, leave));
-  // Do not focus the tile or intercept keyboard/paste events: Photoshop owns the paste.
+
+  ["mouseenter", "mouseover", "mousemove", "pointerenter", "pointerover", "pointermove"].forEach(name => zone.addEventListener(name, enter));
+  ["mouseleave", "mouseout", "pointerleave", "pointerout"].forEach(name => zone.addEventListener(name, leave));
+  // Do not focus the zone or intercept keyboard/paste events: Photoshop owns the paste.
 }
 
 function resetTarget() {
@@ -277,6 +407,10 @@ function resetTarget() {
 async function stop() {
   disposed = true;
   resetTarget();
+  if (panelPasteBound && typeof document !== "undefined" && document && typeof document.removeEventListener === "function") {
+    document.removeEventListener("paste", onPanelPaste);
+    panelPasteBound = false;
+  }
   if (registration) {
     try {
       if (registration !== true) await registration;

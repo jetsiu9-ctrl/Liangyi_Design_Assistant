@@ -794,6 +794,16 @@
     border-color: rgba(106, 159, 217, 0.85);
 }
 
+.ai-assistant-panel .reference-add-cell.is-drop-active {
+    cursor: copy;
+}
+
+.ai-assistant-panel .reference-add-cell.is-drop-active .reference-add-tile {
+    background: rgba(61, 125, 231, 0.18);
+    border-color: rgba(106, 159, 217, 0.95);
+    border-style: solid;
+}
+
 .ai-assistant-panel .reference-add-icon,
 .ai-assistant-panel .reference-add-text {
     color: rgba(255, 255, 255, 0.55);

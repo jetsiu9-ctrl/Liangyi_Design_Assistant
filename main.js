@@ -663,7 +663,7 @@ function getMainPanelHTML() {
                                 <sp-label>参考图</sp-label>
                                 <sp-body id="referenceCountText" size="S">0/8</sp-body>
                             </section>
-                            <sp-body class="info-text">点击“+”上传当前画布；或点击上传本地图像；鼠标悬浮到“+”上方后“按Ctrl+V”可以粘贴上传</sp-body>
+                            <sp-body class="info-text">框选选区点击「+」上传，不框选为整个画布上传；悬浮「+」上按 Ctrl+V 可粘贴上传；也可上传本地图片或直接拖到「+」上</sp-body>
                             <section id="referenceList" class="reference-list"></section>
                             <section class="button-row reference-actions">
                                 <sp-button id="uploadReferencesButton" variant="secondary">
@@ -800,7 +800,7 @@ function getMainPanelHTML() {
                                 <sp-label>参考图</sp-label>
                                 <sp-body id="imageReverseImageCount" size="S">0/8</sp-body>
                             </section>
-                            <sp-body class="info-text">点击“+”上传当前画布；或点击上传本地图像；鼠标悬浮到“+”上方后“按Ctrl+V”可以粘贴上传</sp-body>
+                            <sp-body class="info-text">框选选区点击「+」上传，不框选为整个画布上传；悬浮「+」上按 Ctrl+V 可粘贴上传；也可上传本地图片或直接拖到「+」上</sp-body>
                             <section id="imageReverseImageList" class="reference-list">
                                 <section class="reference-cell reference-add-cell">
                                     <sp-button id="imageReverseAddButton" class="reference-add-tile" variant="secondary">
@@ -1084,6 +1084,7 @@ entrypoints.setup({
                     loadScript('src/modules/guidesModule.js'),
                     loadScript('src/modules/photoshopImageTarget.js'),
                     loadScript('src/modules/photoshopPasteReference.js'),
+                    loadScript('src/modules/referenceFileDrop.js'),
                     loadScript('src/modules/aiAssistantModule.js'),
                     loadScript('src/modules/imageReverseModule.js'),
                     loadScript('src/modules/panel.js')

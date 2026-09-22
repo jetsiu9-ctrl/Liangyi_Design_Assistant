@@ -67,6 +67,9 @@ let currentResultIndex = 0;
 let currentPreviewUrl = "";
 let referenceImages = [];
 let referenceAddInProgress = false;
+// 粘贴图层导入期间的独立标志：不能复用 referenceAddInProgress，
+// 否则 acceptPastedReference 会把自己拒掉。
+let referencePasteImporting = false;
 let activeGenerationCount = 0;
 let resultFileSequence = 0;
 let generationStatusSequence = 0;
@@ -213,7 +216,7 @@ function finishGenerationStatus(timeoutState, message) {
 function setBusy(isBusy) {
   element("generateButton").disabled = isBusy;
   element("clearReferencesButton").disabled = isBusy;
-  element("uploadReferencesButton").disabled = isBusy || referenceAddInProgress || referenceImages.length >= MAX_REFERENCE_IMAGES;
+  element("uploadReferencesButton").disabled = isBusy || referenceAddInProgress || referencePasteImporting || referenceImages.length >= MAX_REFERENCE_IMAGES;
   updateResultButtons(isBusy);
   element("interfacePicker").disabled = isBusy;
   element("addInterfaceButton").disabled = isBusy;
@@ -1466,7 +1469,7 @@ function acceptPastedReference(image) {
 }
 
 async function uploadReferenceImages() {
-  if (referenceAddInProgress) {
+  if (referenceAddInProgress || referencePasteImporting) {
     return;
   }
   if (referenceImages.length >= MAX_REFERENCE_IMAGES) {
@@ -1518,6 +1521,57 @@ async function uploadReferenceImages() {
   }
 }
 
+async function importDroppedReferences(entries) {
+  if (referenceAddInProgress || referencePasteImporting) {
+    return;
+  }
+  if (referenceImages.length >= MAX_REFERENCE_IMAGES) {
+    setStatus(`最多只能添加 ${MAX_REFERENCE_IMAGES} 张参考图。`);
+    return;
+  }
+  const drop = window.LiangyiReferenceFileDrop;
+  if (!drop) {
+    setStatus("文件拖拽模块尚未加载。");
+    return;
+  }
+  referenceAddInProgress = true;
+  setBusy(true);
+  renderReferences();
+  const pending = [];
+  try {
+    const files = entries.filter((entry) => entry && entry.isFolder !== true);
+    if (!files.length) {
+      throw new Error("拖入的内容中没有可用的图片文件。");
+    }
+    if (files.length > MAX_REFERENCE_IMAGES - referenceImages.length) {
+      throw new Error(`最多只能添加 ${MAX_REFERENCE_IMAGES} 张参考图，当前还可添加 ${MAX_REFERENCE_IMAGES - referenceImages.length} 张，请重新拖入。`);
+    }
+    for (const entry of files) {
+      const mimeType = drop.mimeTypeOf(entry.name);
+      if (!mimeType) {
+        throw new Error(`不支持的图像格式：${entry.name}`);
+      }
+      const bytes = await drop.readEntry(entry);
+      pending.push({
+        name: entry.name,
+        mimeType,
+        bytes,
+        url: URL.createObjectURL(new Blob([bytes], { type: mimeType }))
+      });
+    }
+    referenceImages.push(...pending);
+    pending.length = 0;
+    setStatus(`已拖入 ${files.length} 张参考图：${referenceImages.length}/${MAX_REFERENCE_IMAGES}`);
+  } catch (error) {
+    pending.forEach((item) => URL.revokeObjectURL(item.url));
+    setStatus(`拖入参考图失败：${error.message}`);
+  } finally {
+    referenceAddInProgress = false;
+    setBusy(false);
+    renderReferences();
+  }
+}
+
 function removeReferenceImage(index) {
   if (index < 0 || index >= referenceImages.length) {
     return;
@@ -1542,7 +1596,7 @@ function clearReferenceImages() {
 }
 
 function renderReferences() {
-  element("uploadReferencesButton").disabled = referenceAddInProgress || referenceImages.length >= MAX_REFERENCE_IMAGES;
+  element("uploadReferencesButton").disabled = referenceAddInProgress || referencePasteImporting || referenceImages.length >= MAX_REFERENCE_IMAGES;
   const list = element("referenceList");
   list.textContent = "";
   element("referenceCountText").textContent = `${referenceImages.length}/${MAX_REFERENCE_IMAGES}`;
@@ -1589,12 +1643,19 @@ function renderReferences() {
 
     const addButton = document.createElement("sp-button");
     addButton.className = "reference-add-tile";
-    addButton.disabled = referenceAddInProgress;
+    addButton.disabled = referenceAddInProgress || referencePasteImporting;
     addButton.setAttribute("variant", "secondary");
     if (window.LiangyiPhotoshopPaste) {
-      window.LiangyiPhotoshopPaste.bind(addButton, {
+      // 绑在不会被重绘的列表容器上：每次 renderReferences 都会重建「+」按钮，
+      // 监听若挂在按钮上，重绘后悬浮状态就失效了。
+      window.LiangyiPhotoshopPaste.bind(list, {
+        resolveTile: () => list.querySelector(".reference-add-tile"),
+        // 这里的 canAdd 不能包含 referencePasteImporting，否则导入过程中会把自己拒掉。
         canAdd: () => !referenceAddInProgress && referenceImages.length < MAX_REFERENCE_IMAGES,
         acceptImage: acceptPastedReference,
+        // 导入期间锁住上传与拖入，避免它们把 referenceAddInProgress 置真而打断本次导入。
+        onImportStart: () => { referencePasteImporting = true; setBusy(true); renderReferences(); },
+        onImportEnd: () => { referencePasteImporting = false; setBusy(false); renderReferences(); },
         setStatus
       });
     }
@@ -1617,6 +1678,13 @@ function renderReferences() {
     addButton.appendChild(addText);
 
     wrapper.appendChild(addButton);
+    if (window.LiangyiReferenceFileDrop) {
+      window.LiangyiReferenceFileDrop.bind(wrapper, {
+        canAdd: () => !referenceAddInProgress && !referencePasteImporting && referenceImages.length < MAX_REFERENCE_IMAGES,
+        onDrop: importDroppedReferences,
+        setStatus
+      });
+    }
     list.appendChild(wrapper);
   }
 }

@@ -230,15 +230,28 @@ function importHarness(failure) {
   const context = {window:{},document:{},require:name=>modules[name],setTimeout,clearTimeout};
   const code=fs.readFileSync(path.join(__dirname,'../src/modules/photoshopPasteReference.js'),'utf8');
   vm.runInNewContext(code.replace('window.LiangyiPhotoshopPaste = {','window.LiangyiPhotoshopPaste = { importPastedLayer,'),context);
-  const target = {tile:{},canAdd:()=>failure!=='full',setStatus:message=>statuses.push(message),async acceptImage(image){
+  const events = [];
+  const target = {tile:{},canAdd:()=>failure!=='full',setStatus:message=>statuses.push(message),
+    onImportStart:()=>events.push('import-start'),onImportEnd:()=>events.push('import-end'),
+    async acceptImage(image){
     log.push('accept'); assert.equal(image.mimeType,'image/png'); assert.equal(image.bytes.byteLength,3);
     assert.equal(app.activeDocument,source);
     if(failure==='accept') throw new Error('accept failed');
     if(failure==='reject') return false;
     return true;
   }};
-  return {log,statuses,app,source,run:()=>context.window.LiangyiPhotoshopPaste.importPastedLayer(target,41,100,beforePaste)};
+  return {log,statuses,events,app,source,run:()=>context.window.LiangyiPhotoshopPaste.importPastedLayer(target,41,100,beforePaste)};
 }
+
+test('locks the other reference entry points for the whole modal import',async()=>{
+  const h=importHarness(); await h.run();
+  assert.deepEqual(h.events,['import-start','import-end']);
+});
+
+test('releases the entry-point lock even when the import fails',async()=>{
+  const h=importHarness('export'); assert.equal(await h.run(),false);
+  assert.deepEqual(h.events,['import-start','import-end']);
+});
 
 test('exports only the pasted layer and restores the exact pre-paste history state after acceptance',async()=>{
   const h=importHarness(); assert.equal(await h.run(),true);
@@ -259,4 +272,187 @@ test('history restore failure deletes the pasted layer as fallback and reports t
   assert.ok(h.log.indexOf('accept')<h.log.indexOf('restore-history'));
   assert.ok(h.log.indexOf('restore-history')<h.log.indexOf('delete-source'));
   assert.ok(h.statuses.some(message=>message.includes('原选区恢复失败')));
+});
+
+// 悬浮监听绑在不会被重绘的列表容器上，这里用带 classList 的假容器复现真实 DOM 行为。
+function zoneHarness() {
+  const callbacks = [], jobs = new Map(), listeners = {}, panelListeners = {};
+  let nextTimer = 0, currentTile = null, fakeNow = 1000000;
+  const body = {};
+  const document = {
+    body,
+    activeElement: body,
+    addEventListener(name, cb) { (panelListeners[name] = panelListeners[name] || []).push(cb); },
+    removeEventListener(name, cb) {
+      if (panelListeners[name]) panelListeners[name] = panelListeners[name].filter(item => item !== cb);
+    }
+  };
+  const app = { documents: [{}], activeDocument: { id: 41, layers: [{ id: 1 }], activeLayers: [] } };
+  let layerSequence = 100;
+  const action = {
+    addNotificationListener(events, callback) { callbacks.push(callback); return Promise.resolve(); },
+    removeNotificationListener() { return Promise.resolve(); }
+  };
+  const context = {
+    window: {}, document, require: name => (name === 'uxp' ? { storage: {} } : { app, action }),
+    getComputedStyle: () => ({ display: 'block', visibility: 'visible' }),
+    setTimeout: callback => { jobs.set(++nextTimer, callback); return nextTimer; },
+    clearTimeout: id => jobs.delete(id),
+    Date: { now: () => fakeNow }
+  };
+  const code = fs.readFileSync(path.join(__dirname, '../src/modules/photoshopPasteReference.js'), 'utf8')
+    .replace('window.LiangyiPhotoshopPaste =', 'importPastedLayer = async (target, docId, layerId, restoreState) => target.acceptImage({ docId, layerId, restoreState });\nwindow.LiangyiPhotoshopPaste =');
+  vm.runInNewContext(code, context);
+  const api = context.window.LiangyiPhotoshopPaste;
+
+  const zone = {
+    classList: { contains: name => name === 'reference-list' },
+    addEventListener(name, cb) { (listeners[name] = listeners[name] || []).push(cb); },
+    querySelector: () => currentTile
+  };
+  const tile = () => ({ disabled: false, isConnected: true, parentNode: zone,
+    classList: { contains: name => name === 'reference-add-tile' }, setAttribute() {} });
+  const thumb = () => ({ parentNode: zone, classList: { contains: () => false } });
+  const fire = (name, event) => (listeners[name] || []).forEach(cb => cb(event || {}));
+  const firePanelPaste = event => (panelListeners.paste || []).forEach(cb => cb(event || {}));
+  const calls = [], statuses = [], restores = [];
+
+  return { api, app, document, body, zone, tile, thumb, fire, firePanelPaste, calls, statuses, restores,
+    listenerCount: name => (listeners[name] || []).length,
+    setClock: value => { fakeNow = value; },
+    setTile: value => { currentTile = value; },
+    bind: () => api.bind(zone, {
+      resolveTile: () => currentTile,
+      canAdd: () => true,
+      async acceptImage(image) { calls.push(image.docId); restores.push(image.restoreState); },
+      setStatus: message => statuses.push(message)
+    }),
+    paste(descriptor = {}) {
+      if (app.documents.length && app.activeDocument.layers) {
+        const layer = { id: ++layerSequence };
+        app.activeDocument.layers.push(layer);
+        app.activeDocument.activeLayers = [layer];
+      }
+      callbacks[0]('paste', descriptor);
+    },
+    async flush() { const batch = Array.from(jobs.values()); jobs.clear(); for (const callback of batch) await callback(); }
+  };
+}
+
+test('keeps working after the list redraws and replaces the + button', async () => {
+  const h = zoneHarness(); await h.api.start();
+  h.bind();
+  h.setTile(h.tile());
+  h.fire('mousemove', { target: h.tile() });
+  h.paste(); await h.flush();
+  assert.deepEqual(h.calls, [41]);
+  // 模拟 renderReferences：整个「+」按钮被换成全新节点，旧引用全部失效。
+  h.setTile(h.tile());
+  h.paste(); await h.flush();
+  assert.deepEqual(h.calls, [41, 41]);
+});
+
+test('a null relatedTarget from a redraw does not clear the hovered target', async () => {
+  const h = zoneHarness(); await h.api.start();
+  h.bind();
+  h.setTile(h.tile());
+  h.fire('mousemove', { target: h.tile() });
+  h.fire('mouseout', { relatedTarget: null });
+  h.paste(); await h.flush();
+  assert.deepEqual(h.calls, [41]);
+});
+
+test('moving onto a non-tile element inside the list clears the hovered target', async () => {
+  const h = zoneHarness(); await h.api.start();
+  h.bind();
+  h.setTile(h.tile());
+  h.fire('mousemove', { target: h.tile() });
+  h.fire('mouseout', { relatedTarget: h.thumb() });
+  h.paste(); await h.flush();
+  assert.deepEqual(h.calls, []);
+});
+
+test('a fresh hover snapshot supplies the restore state', async () => {
+  const h = zoneHarness(); h.setClock(1000); await h.api.start();
+  h.app.activeDocument.activeHistoryState = { id: 9 };
+  h.app.activeDocument.historyStates = [{ id: 8 }, { id: 9 }];
+  h.bind(); h.setTile(h.tile());
+  h.fire('mousemove', { target: h.tile() });
+  h.setClock(1500);
+  h.paste(); await h.flush();
+  assert.equal(h.restores[0].id, 9);
+});
+
+test('a stale hover snapshot is never trusted for the history restore', async () => {
+  const h = zoneHarness(); h.setClock(1000); await h.api.start();
+  h.app.activeDocument.activeHistoryState = { id: 9 };
+  h.app.activeDocument.historyStates = [{ id: 8 }, { id: 9 }];
+  h.bind(); h.setTile(h.tile());
+  h.fire('mousemove', { target: h.tile() });
+  // 悬浮之后用户在 Photoshop 里又动过图层，旧快照的历史位置已经不能用了。
+  h.setClock(1000 + 10000);
+  h.paste(); await h.flush();
+  assert.equal(h.restores[0].id, 8);
+});
+
+test('a paste arriving mid-import explains why it is ignored', async () => {
+  const h = zoneHarness(); await h.api.start();
+  h.bind(); h.setTile(h.tile());
+  h.fire('mousemove', { target: h.tile() });
+  h.paste(); h.paste();
+  assert.ok(h.statuses.some(message => message.includes('正在导入上一张')));
+  await h.flush();
+});
+
+test('a paste made while the panel holds focus explains that Photoshop never saw it', async () => {
+  const h = zoneHarness(); await h.api.start();
+  h.bind(); h.setTile(h.tile());
+  h.fire('mousemove', { target: h.tile() });
+  h.firePanelPaste({ target: { tagName: 'DIV', parentNode: null } });
+  assert.ok(h.statuses.some(message => message.includes('键盘焦点还在面板上')));
+});
+
+test('a paste made inside a text field stays silent', async () => {
+  const h = zoneHarness(); await h.api.start();
+  h.bind(); h.setTile(h.tile());
+  h.fire('mousemove', { target: h.tile() });
+  h.firePanelPaste({ target: { tagName: 'INPUT', parentNode: null } });
+  assert.equal(h.statuses.length, 0);
+});
+
+test('the hover listener is installed only once per container', async () => {
+  const h = zoneHarness(); await h.api.start();
+  h.bind(); h.bind(); h.bind();
+  assert.equal(h.listenerCount('mousemove'), 1);
+  h.setTile(h.tile());
+  h.fire('mousemove', { target: h.tile() });
+  h.paste(); await h.flush();
+  assert.deepEqual(h.calls, [41]);
+});
+
+test('hovering the + releases keyboard focus held by a non-input element', async () => {
+  const h = zoneHarness(); await h.api.start();
+  let blurred = 0;
+  h.document.activeElement = { tagName: 'BUTTON', parentNode: null, blur() { blurred += 1; } };
+  h.bind(); h.setTile(h.tile());
+  h.fire('mousemove', { target: h.tile() });
+  assert.equal(blurred, 1);
+});
+
+test('hovering the + never steals focus from a text field', async () => {
+  const h = zoneHarness(); await h.api.start();
+  let blurred = 0;
+  h.document.activeElement = { tagName: 'INPUT', parentNode: null, blur() { blurred += 1; } };
+  h.bind(); h.setTile(h.tile());
+  h.fire('mousemove', { target: h.tile() });
+  assert.equal(blurred, 0);
+});
+
+test('hovering the + does nothing when the panel body already holds focus', async () => {
+  const h = zoneHarness(); await h.api.start();
+  let blurred = 0;
+  h.body.blur = () => { blurred += 1; };
+  h.bind(); h.setTile(h.tile());
+  h.fire('mousemove', { target: h.tile() });
+  assert.equal(blurred, 0);
 });
