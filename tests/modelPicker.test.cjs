@@ -4,10 +4,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-// 锁住「自定义模型」从独立字段降级为下拉菜单项之后的行为：
-// 平时收起、主动选中才展开、输入值可持久化、切回普通模型后不被重绘抢回。
-const CUSTOM_VALUE = '__custom_model__';
-
+// 「使用自定义模型」下拉项与配套输入框已移除：模型只能来自一键拉取的结果。
+// 本文件锁住移除后的行为：下拉只含拉取项与模型项、选择模型即持久化、无模型时报错。
 function createHarness(interfaces) {
   class Element {
     constructor(tag = '') {
@@ -30,7 +28,7 @@ function createHarness(interfaces) {
         }
       };
     }
-    get value() { return this._value !== undefined ? this._value : (this.attributes.value || ''); }
+    get value() { return this._value !== undefined ? this._value : (this.attributes.value || ''); } 
     set value(next) { this._value = next; }
     get textContent() { return this._text; }
     set textContent(next) { this._text = next; this.children = []; }
@@ -124,7 +122,10 @@ function createHarness(interfaces) {
       getModelValue,
       syncCurrentInterfaceFromFields,
       syncModelPickerSelection,
-      applyImageGenerationPreferences
+      applyImageGenerationPreferences,
+      matchesImageProvider,
+      renderImageModelPicker,
+      getImageModelsForProvider
     };
     applyImageGenerationPreferences();
     bindEvents();
@@ -142,13 +143,14 @@ function createHarness(interfaces) {
   const itemByValue = (value) => modelItems().find((item) => item.getAttribute('value') === value);
   const selectOnly = (value) => {
     modelItems().forEach((item) => item.removeAttribute('selected'));
-    itemByValue(value).setAttribute('selected', '');
+    const target = itemByValue(value);
+    if (target) { target.setAttribute('selected', ''); }
   };
 
   return {
     el, api: context.window.testApi, tick, selectOnly, itemByValue,
     writes: () => writes,
-    hidden: () => el('customModelField').classList.contains('is-hidden'),
+    menuValues: () => modelItems().map((item) => item.getAttribute('value')),
     chooseModel: async (value) => {
       selectOnly(value);
       await el('modelPicker').fire('change');
@@ -165,92 +167,108 @@ const BASE_INTERFACE = {
   imageModels: ['gpt-image-1', 'gpt-image-2']
 };
 
-test('默认收起自定义模型输入框，并把下拉里的模型作为实际模型', () => {
+test('默认把下拉里的第一个模型作为实际模型', () => {
   const h = createHarness([BASE_INTERFACE]);
-  assert.equal(h.hidden(), true);
   assert.equal(h.api.getSelectedImageModelName(), 'gpt-image-1');
 });
 
-test('模型下拉里提供「使用自定义模型」这一项', () => {
+test('下拉只包含「一键获取模型」和拉取到的模型，不含自定义模型项', () => {
   const h = createHarness([BASE_INTERFACE]);
-  const values = h.el('modelPickerMenu').querySelectorAll('sp-menu-item')
-    .map((item) => item.getAttribute('value'));
-  assert.deepEqual(Array.from(values), ['__pull_models__', 'gpt-image-1', 'gpt-image-2', CUSTOM_VALUE]);
+  assert.deepEqual(
+    Array.from(h.menuValues()),
+    ['__pull_models__', 'gpt-image-1', 'gpt-image-2']
+  );
 });
 
-test('选中「使用自定义模型」后展开输入框，并以输入值作为实际模型', async () => {
+test('选择某个模型后它成为实际模型并写回接口', async () => {
   const h = createHarness([BASE_INTERFACE]);
-  await h.chooseModel(CUSTOM_VALUE);
-  assert.equal(h.hidden(), false);
+  await h.chooseModel('gpt-image-2');
+  assert.equal(h.api.getSelectedImageModelName(), 'gpt-image-2');
+  assert.equal(h.api.getModelValue(), 'gpt-image-2');
+  assert.equal(h.api.getCurrentInterface().imageModel, 'gpt-image-2');
+});
+
+test('模型变更会持久化', async () => {
+  const h = createHarness([BASE_INTERFACE]);
+  await h.chooseModel('gpt-image-2');
+  h.api.syncCurrentInterfaceFromFields();
+  assert.equal(h.api.getCurrentInterface().imageModel, 'gpt-image-2');
+  assert.ok(h.writes() > 0);
+});
+
+test('没有可用模型时给出引导性错误，而不是自定义模型提示', () => {
+  const h = createHarness([Object.assign({}, BASE_INTERFACE, { imageModels: [] })]);
   assert.equal(h.api.getSelectedImageModelName(), '');
-
-  h.el('customModelInput').value = 'dall-e-3';
-  assert.equal(h.api.getSelectedImageModelName(), 'dall-e-3');
-  assert.equal(h.api.getModelValue(), 'dall-e-3');
-});
-
-test('已选择自定义模型但未填写名称时给出针对性错误', async () => {
-  const h = createHarness([BASE_INTERFACE]);
-  await h.chooseModel(CUSTOM_VALUE);
   let message = '';
   try {
     h.api.getModelValue();
   } catch (error) {
     message = String(error.message || error);
   }
-  assert.match(message, /自定义模型名称/);
+  assert.match(message, /一键获取模型/);
+  assert.doesNotMatch(message, /自定义模型/);
 });
 
-test('自定义模型名称会写回当前接口并持久化', async () => {
+test('重绘下拉后仍保留当前模型选择', async () => {
   const h = createHarness([BASE_INTERFACE]);
-  await h.chooseModel(CUSTOM_VALUE);
-  h.el('customModelInput').value = 'dall-e-3';
-  await h.el('customModelInput').fire('change');
-  await h.tick();
-
-  h.api.syncCurrentInterfaceFromFields();
-  const current = h.api.getCurrentInterface();
-  assert.equal(current.customImageModel, 'dall-e-3');
-  assert.equal(current.useCustomImageModel, true);
-  assert.ok(h.writes() > 0);
-});
-
-test('切回普通模型后收起输入框，且重绘不会再抢回自定义选择', async () => {
-  const h = createHarness([BASE_INTERFACE]);
-  await h.chooseModel(CUSTOM_VALUE);
-  h.el('customModelInput').value = 'dall-e-3';
-  await h.el('customModelInput').fire('change');
-  await h.tick();
-
   await h.chooseModel('gpt-image-2');
-  assert.equal(h.hidden(), true);
-  assert.equal(h.api.getSelectedImageModelName(), 'gpt-image-2');
-  assert.equal(h.api.getCurrentInterface().useCustomImageModel, false);
-
-  // 模拟切换接口或拉取模型后的重绘
   h.api.syncModelPickerSelection();
-  assert.equal(h.hidden(), true);
   assert.equal(h.api.getSelectedImageModelName(), 'gpt-image-2');
-  // 名称仍保留，便于用户再次切回自定义模型
-  assert.equal(h.api.getCurrentInterface().customImageModel, 'dall-e-3');
 });
 
-test('重新载入时能恢复「使用自定义模型」的选择与名称', () => {
-  const h = createHarness([Object.assign({}, BASE_INTERFACE, {
-    customImageModel: 'flux-pro',
-    useCustomImageModel: true
-  })]);
-  assert.equal(h.el('customModelInput').value, 'flux-pro');
-  assert.equal(h.hidden(), false);
-  assert.equal(h.api.getSelectedImageModelName(), 'flux-pro');
+test('未拉取到模型时下拉只剩「一键获取模型」一项', () => {
+  const h = createHarness([Object.assign({}, BASE_INTERFACE, { imageModels: [] })]);
+  assert.deepEqual(Array.from(h.menuValues()), ['__pull_models__']);
 });
 
-test('接口只记录自定义模型但未启用时，仍使用普通模型', () => {
+// 带 banana 的模型（nano-banana / gemini-*-banana 等）一律归 gemini 图像生成通道，
+// 且不得漏进 openai 通道，否则在 openai 下会被 gpt/image 条件挡掉而整个消失。
+test('带 banana 的模型归类到 gemini 通道，而非 openai 通道', () => {
+  const h = createHarness([BASE_INTERFACE]);
+  const banana = ['nano-banana', 'gemini-3-pro-banana-preview', 'flux-banana-pro'];
+  banana.forEach((model) => {
+    assert.equal(h.api.matchesImageProvider(model, 'gemini'), true, `${model} 应属于 gemini 通道`);
+    assert.equal(h.api.matchesImageProvider(model, 'openai'), false, `${model} 不应属于 openai 通道`);
+  });
+});
+
+test('banana 判定大小写不敏感，且不影响既有 gemini / openai 规则', () => {
+  const h = createHarness([BASE_INTERFACE]);
+  assert.equal(h.api.matchesImageProvider('Nano-Banana', 'gemini'), true);
+  assert.equal(h.api.matchesImageProvider('NANO-BANANA', 'gemini'), true);
+  assert.equal(h.api.matchesImageProvider('gemini-2.5-flash-image', 'gemini'), true);
+  assert.equal(h.api.matchesImageProvider('gpt-image-1', 'openai'), true);
+  assert.equal(h.api.matchesImageProvider('gemini-2.5-flash', 'gemini'), false);
+  assert.equal(h.api.matchesImageProvider('seedream-image', 'openai'), false);
+  assert.equal(h.api.matchesImageProvider('', 'gemini'), false);
+  assert.equal(h.api.matchesImageProvider(undefined, 'openai'), false);
+});
+
+test('gemini 下拉渲染包含 banana 模型，openai 下拉不含', () => {
   const h = createHarness([Object.assign({}, BASE_INTERFACE, {
-    customImageModel: 'flux-pro',
-    useCustomImageModel: false
+    imageModels: ['nano-banana', 'gemini-2.5-flash-image', 'gpt-image-1']
   })]);
-  assert.equal(h.el('customModelInput').value, 'flux-pro');
-  assert.equal(h.hidden(), true);
-  assert.equal(h.api.getSelectedImageModelName(), 'gpt-image-1');
+
+  // provider 通过下拉里被标记 selected 的菜单项读取，直接改元素 value 不生效。
+  const selectProvider = (value) => {
+    h.el('imageProviderPicker').querySelectorAll('sp-menu-item').forEach((item) => {
+      item.removeAttribute('selected');
+      if (item.getAttribute('value') === value) {
+        item.setAttribute('selected', '');
+      }
+    });
+  };
+
+  selectProvider('gemini');
+  h.api.renderImageModelPicker('');
+  assert.ok(h.menuValues().includes('nano-banana'), 'gemini 下拉应包含 nano-banana');
+  assert.deepEqual(
+    Array.from(h.api.getImageModelsForProvider('gemini')),
+    ['gemini-2.5-flash-image', 'nano-banana']
+  );
+
+  selectProvider('openai');
+  h.api.renderImageModelPicker('');
+  assert.equal(h.menuValues().includes('nano-banana'), false, 'openai 下拉不应包含 nano-banana');
+  assert.deepEqual(Array.from(h.api.getImageModelsForProvider('openai')), ['gpt-image-1']);
 });

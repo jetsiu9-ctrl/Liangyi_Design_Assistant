@@ -73,6 +73,19 @@
     margin-bottom: 2px;
 }
 
+/* 透明背景 + 异步任务两个复选项靠左排列，与上方字段左边缘对齐。 */
+.ai-assistant-panel .check-row-end {
+    justify-content: flex-start;
+}
+
+.ai-assistant-panel .check-row-end sp-checkbox + sp-label {
+    margin-right: 10px;
+}
+
+.ai-assistant-panel .check-row-end sp-label:last-child {
+    margin-right: 0;
+}
+
 .ai-assistant-panel .check-row sp-checkbox {
     flex: 0 0 auto;
 }

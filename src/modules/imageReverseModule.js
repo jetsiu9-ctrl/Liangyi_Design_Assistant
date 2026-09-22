@@ -492,10 +492,10 @@ async function loadPreset(preset) {
 
 function getModelName() {
   const modelChoice = getPickerValue("imageReverseModelPicker");
-  if (modelChoice && modelChoice !== "custom" && modelChoice !== MODEL_PULL_ACTION_VALUE) {
+  if (modelChoice && modelChoice !== MODEL_PULL_ACTION_VALUE) {
     return modelChoice;
   }
-  return String(element("imageReverseCustomModelInput").value || "").trim();
+  return "";
 }
 
 function getPulledReverseModels() {
@@ -510,9 +510,16 @@ function isGeminiModel(model) {
   return String(model || "").toLowerCase().includes("gemini");
 }
 
+// banana 系列（nano-banana 等）是图像生成专用模型，两个反推接口都不应出现，
+// 这里显式排除，避免它经反推池混进下拉。
+function isBananaModel(model) {
+  return String(model || "").toLowerCase().includes("banana");
+}
+
 function getModelPresets(provider) {
   const isGeminiProvider = provider === "gemini";
   return getPulledReverseModels()
+    .filter((model) => !isBananaModel(model))
     .filter((model) => isGeminiModel(model) === isGeminiProvider)
     .map((model) => ({
       value: String(model),
@@ -523,8 +530,7 @@ function getModelPresets(provider) {
 function renderModelPicker(provider, preferredModel) {
   const menu = element("imageReverseModelPickerMenu");
   const presets = getModelPresets(provider);
-  const validValues = presets.map((item) => item.value).concat("custom");
-  const selectedValue = validValues.includes(preferredModel)
+  const selectedValue = presets.some((item) => item.value === preferredModel)
     ? preferredModel
     : (presets[0]?.value || "");
   menu.textContent = "";
@@ -535,7 +541,7 @@ function renderModelPicker(provider, preferredModel) {
   pullItem.addEventListener("click", triggerReverseModelPull);
   menu.appendChild(pullItem);
 
-  presets.concat({ value: "custom", label: "使用自定义模型" }).forEach((preset) => {
+  presets.forEach((preset) => {
     const item = document.createElement("sp-menu-item");
     item.setAttribute("value", preset.value);
     item.textContent = preset.label;
@@ -553,10 +559,6 @@ function renderModelPicker(provider, preferredModel) {
 }
 
 function updateModelUi() {
-  const selectedModel = getPickerValue("imageReverseModelPicker");
-  const isCustom = selectedModel === "custom";
-  const input = element("imageReverseCustomModelInput");
-  input.disabled = !isCustom;
   saveModuleSettings();
 }
 
@@ -849,7 +851,6 @@ function saveModuleSettings() {
       provider: getPickerValue("imageReverseProviderPicker") || DEFAULT_PROVIDER,
       preset: getPickerValue("imageReversePresetPicker") || "reverse",
       model: selectedModel === MODEL_PULL_ACTION_VALUE ? "" : selectedModel,
-      customModel: String(element("imageReverseCustomModelInput").value || ""),
       prompt: String(element("imageReversePromptInput").value || "")
     }));
   } catch (error) {
@@ -866,9 +867,8 @@ function loadModuleSettings() {
   }
   setPickerValue("imageReverseProviderPicker", saved.provider || DEFAULT_PROVIDER);
   setPickerValue("imageReversePresetPicker", saved.preset || "reverse");
-  element("imageReverseCustomModelInput").value = saved.customModel || "";
   element("imageReversePromptInput").value = saved.prompt || "";
-  updateProviderUi(saved.model || (saved.customModel ? "custom" : ""));
+  updateProviderUi(saved.model || "");
   updatePresetUi();
 }
 
@@ -977,7 +977,6 @@ function bindEvents() {
     element("imageReverseModelPicker").addEventListener(eventName, handleReverseModelSelection);
     element("imageReversePresetPicker").addEventListener(eventName, updatePresetUi);
   });
-  element("imageReverseCustomModelInput").addEventListener("change", saveModuleSettings);
   element("imageReversePromptInput").addEventListener("change", saveModuleSettings);
 }
 

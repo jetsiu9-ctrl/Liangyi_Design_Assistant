@@ -12,6 +12,8 @@ const MAX_POLL_ATTEMPTS = 120;
 const MAX_REFERENCE_IMAGES = 8;
 const DEFAULT_OUTPUT_FORMAT = "png";
 const DEFAULT_BACKGROUND = "auto";
+// 勾选「透明背景」时使用的取值；OpenAI 要求透明背景必须搭配 png/webp 输出。
+const TRANSPARENT_BACKGROUND = "transparent";
 const DEFAULT_MODERATION = "auto";
 const DEFAULT_POLL_INTERVAL_MS = 5000;
 const DEFAULT_GENERATION_TIMEOUT_SECONDS = 300;
@@ -20,8 +22,6 @@ const GENERATION_STATUS_INTERVAL_MS = 1000;
 const MODEL_PULL_TIMEOUT_MS = 30000;
 const MODEL_PULL_ACTION_VALUE = "__pull_models__";
 const MODEL_PULL_ACTION_LABEL = "一键获取模型";
-const MODEL_CUSTOM_VALUE = "__custom_model__";
-const MODEL_CUSTOM_LABEL = "使用自定义模型";
 const RESULT_LAYER_NAME_PREFIX = "\u51c9\u610fAI_";
 const SIZE_MAP = {
   "1:1": { "1k": "1024x1024", "2k": "2048x2048", "4k": "2880x2880" },
@@ -309,8 +309,6 @@ function normalizeInterface(item, index) {
     imageModel: imageModels.includes(requestedImageModel)
       ? requestedImageModel
       : (imageModels[0] || ""),
-    customImageModel: String(item?.customImageModel || "").trim(),
-    useCustomImageModel: item?.useCustomImageModel === true,
     imageEndpointByModel: normalizeEndpointPreferences(item?.imageEndpointByModel)
   };
 }
@@ -360,13 +358,9 @@ function syncCurrentInterfaceFromFields() {
   if (provider === "openai" || provider === "gemini") {
     current.imageProvider = provider;
   }
-  if (imageModel === MODEL_CUSTOM_VALUE) {
-    current.useCustomImageModel = true;
-  } else if (imageModel && imageModel !== MODEL_PULL_ACTION_VALUE) {
-    current.useCustomImageModel = false;
+  if (imageModel && imageModel !== MODEL_PULL_ACTION_VALUE) {
     current.imageModel = imageModel;
   }
-  current.customImageModel = String(element("customModelInput").value || "").trim();
   const activeModel = getSelectedImageModelName();
   if (activeModel && (imageEndpoint === "generations" || imageEndpoint === "edits")) {
     current.imageEndpointByModel[activeModel] = imageEndpoint;
@@ -517,12 +511,18 @@ function getCurrentImageModels() {
   return normalizeModelNames(getCurrentInterface().imageModels);
 }
 
+// banana（nano-banana / gemini-*-banana*）与带 gemini 的图像模型同属 gemini 通道。
+// 两类关键词都显式排除，避免 banana 模型被归到 openai 通道下。
+function isBananaModel(model) {
+  return String(model || "").toLowerCase().includes("banana");
+}
+
 function matchesImageProvider(model, provider) {
   const name = String(model || "").toLowerCase();
   if (provider === "gemini") {
-    return (name.includes("image") && name.includes("gemini")) || name.includes("banana");
+    return (name.includes("image") && name.includes("gemini")) || isBananaModel(model);
   }
-  return name.includes("gpt") && name.includes("image") && !name.includes("gemini");
+  return name.includes("gpt") && name.includes("image") && !name.includes("gemini") && !isBananaModel(model);
 }
 
 function getImageModelsForProvider(provider) {
@@ -531,21 +531,7 @@ function getImageModelsForProvider(provider) {
 
 function getSelectedImageModelName() {
   const selectedModel = getPickerValue("modelPicker");
-  if (selectedModel === MODEL_CUSTOM_VALUE) {
-    return String(element("customModelInput").value || "").trim();
-  }
   return selectedModel === MODEL_PULL_ACTION_VALUE ? "" : selectedModel;
-}
-
-// 自定义模型输入框平时收起，只有在下拉里主动选中「使用自定义模型」时才展开，
-// 避免它像以前那样无条件盖过下拉框的选择。
-function updateCustomModelFieldVisibility() {
-  const field = element("customModelField");
-  if (!field) {
-    return;
-  }
-  const isCustom = getPickerValue("modelPicker") === MODEL_CUSTOM_VALUE;
-  field.classList.toggle("is-hidden", !isCustom);
 }
 
 function renderImageModelPicker(preferredModel) {
@@ -571,11 +557,6 @@ function renderImageModelPicker(preferredModel) {
     menu.appendChild(item);
   });
 
-  const customItem = document.createElement("sp-menu-item");
-  customItem.setAttribute("value", MODEL_CUSTOM_VALUE);
-  customItem.textContent = MODEL_CUSTOM_LABEL;
-  menu.appendChild(customItem);
-
   getCurrentInterface().imageModel = selectedModel;
   if (selectedModel) {
     setPickerValue("modelPicker", selectedModel);
@@ -584,15 +565,10 @@ function renderImageModelPicker(preferredModel) {
   }
 }
 
-// 重建下拉并按接口记录的状态恢复选择：优先「使用自定义模型」，否则用普通模型。
-// 是否使用自定义模型由 useCustomImageModel 显式记录，避免仅凭输入框有内容就抢占选择。
+// 重建下拉并恢复接口记录的选择。模型只能来自拉取结果或手动填入的自定义名称。
 function syncModelPickerSelection() {
   const current = getCurrentInterface();
   renderImageModelPicker(current.imageModel);
-  if (current.useCustomImageModel) {
-    setPickerValue("modelPicker", MODEL_CUSTOM_VALUE);
-  }
-  updateCustomModelFieldVisibility();
 }
 
 function getSavedImageEndpoint(model) {
@@ -611,7 +587,6 @@ function updateImageProviderUi() {
 function applyImageGenerationPreferences() {
   const current = getCurrentInterface();
   setPickerValue("imageProviderPicker", current.imageProvider || DEFAULT_IMAGE_PROVIDER);
-  element("customModelInput").value = String(current.customImageModel || "");
   syncModelPickerSelection();
   const model = getSelectedImageModelName();
   setPickerValue("imageEndpointPicker", getSavedImageEndpoint(model));
@@ -900,9 +875,6 @@ function parseInteger(value, fallback) {
 function getModelValue() {
   const model = getSelectedImageModelName();
   if (!model) {
-    if (getPickerValue("modelPicker") === MODEL_CUSTOM_VALUE) {
-      throw new Error("已选择「使用自定义模型」，请先填写自定义模型名称。");
-    }
     throw new Error("请先在模型下拉框中点击“一键获取模型”，并选择一个图像模型。");
   }
   return model;
@@ -942,11 +914,17 @@ function arrayBufferToBase64(buffer) {
   return btoa(binary);
 }
 
+// 勾选「透明背景」时传 transparent，否则交回服务端自动决定（auto）。
+function getBackgroundValue() {
+  const checkbox = element("transparentBackgroundCheckbox");
+  return checkbox && checkbox.checked ? TRANSPARENT_BACKGROUND : DEFAULT_BACKGROUND;
+}
+
 function appendCommonJsonPayload(payload) {
   payload.model = getModelValue();
   payload.quality = getPickerValue("qualityPicker");
   payload.size = getActualSize();
-  payload.background = DEFAULT_BACKGROUND;
+  payload.background = getBackgroundValue();
   payload.output_format = DEFAULT_OUTPUT_FORMAT;
   payload.moderation = DEFAULT_MODERATION;
   payload.n = getImageCount();
@@ -957,7 +935,7 @@ function appendCommonFormFields(form) {
   form.append("model", getModelValue());
   form.append("quality", getPickerValue("qualityPicker"));
   form.append("size", getActualSize());
-  form.append("background", DEFAULT_BACKGROUND);
+  form.append("background", getBackgroundValue());
   form.append("output_format", DEFAULT_OUTPUT_FORMAT);
   form.append("moderation", DEFAULT_MODERATION);
   form.append("n", String(getImageCount()));
@@ -1299,8 +1277,15 @@ async function pullModelsForInterface(target) {
     throw new Error("接口没有返回可识别的模型名称。");
   }
 
-  const imageModels = models.filter((model) => model.toLowerCase().includes("image"));
-  const reverseModels = models.filter((model) => !model.toLowerCase().includes("image"));
+  // 归类规则：名字里带 image 或带 banana（nano-banana 等）的都属于图像生成，
+  // 其余才进图像反推。banana 必须在这里就拨到生成池，否则会先落进反推池、
+  // 被反推模块的两个接口排除后彻底消失。
+  const isImageGenerationModel = (model) => {
+    const name = String(model || "").toLowerCase();
+    return name.includes("image") || name.includes("banana");
+  };
+  const imageModels = models.filter(isImageGenerationModel);
+  const reverseModels = models.filter((model) => !isImageGenerationModel(model));
   interfaceItem.imageModels = imageModels;
   interfaceItem.reverseModels = reverseModels;
   if (!imageModels.includes(interfaceItem.imageModel)) {
@@ -2403,21 +2388,8 @@ function bindEvents() {
           await triggerModelPullFromImagePicker();
           return;
         }
-        if (model === MODEL_CUSTOM_VALUE) {
-          setPickerValue("modelPicker", MODEL_CUSTOM_VALUE);
-          getCurrentInterface().useCustomImageModel = true;
-          updateCustomModelFieldVisibility();
-          const customModel = getSelectedImageModelName();
-          if (customModel) {
-            setPickerValue("imageEndpointPicker", getSavedImageEndpoint(customModel));
-          }
-          await persistSettings();
-          return;
-        }
         setPickerValue("modelPicker", model);
         getCurrentInterface().imageModel = model;
-        getCurrentInterface().useCustomImageModel = false;
-        updateCustomModelFieldVisibility();
         setPickerValue("imageEndpointPicker", getSavedImageEndpoint(getSelectedImageModelName()));
         await persistSettings();
       } catch (error) {
@@ -2446,16 +2418,6 @@ function bindEvents() {
     element("imageProviderPicker").addEventListener(eventName, syncImageProvider);
     element("modelPicker").addEventListener(eventName, syncImageModel);
     element("imageEndpointPicker").addEventListener(eventName, syncImageEndpoint);
-  });
-
-  element("customModelInput").addEventListener("change", async () => {
-    getCurrentInterface().customImageModel = String(element("customModelInput").value || "").trim();
-    setPickerValue("imageEndpointPicker", getSavedImageEndpoint(getSelectedImageModelName()));
-    try {
-      await persistSettings();
-    } catch (error) {
-      setStatus(`无法保存自定义模型：${error.message}`);
-    }
   });
 
   element("generateButton").addEventListener("click", async () => {

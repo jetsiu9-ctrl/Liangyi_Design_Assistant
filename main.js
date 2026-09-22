@@ -706,18 +706,11 @@ function getMainPanelHTML() {
                                 <sp-picker id="modelPicker">
                                     <sp-menu id="modelPickerMenu" slot="options">
                                         <sp-menu-item value="__pull_models__">一键获取模型</sp-menu-item>
-                                        <sp-menu-item value="__custom_model__">使用自定义模型</sp-menu-item>
                                     </sp-menu>
                                 </sp-picker>
                             </section>
                         </section>
 
-                        <section id="customModelField" class="field-row is-hidden">
-                            <section class="field">
-                                <sp-label for="customModelInput">自定义模型名称</sp-label>
-                                <sp-textfield id="customModelInput" placeholder="填写接口支持的模型名，例如 dall-e-3"></sp-textfield>
-                            </section>
-                        </section>
                         <sp-body class="info-text" size="S">Generations 支持文生图和中转站兼容的参考图生图；Edits 至少需要一张参考图。Gemini 使用 generateContent。</sp-body>
 
                         <section class="field-row">
@@ -761,6 +754,8 @@ function getMainPanelHTML() {
                                 <sp-picker id="qualityPicker">
                                     <sp-menu slot="options">
                                         <sp-menu-item value="auto" selected>自动</sp-menu-item>
+                                        <sp-menu-item value="max">最高</sp-menu-item>
+                                        <sp-menu-item value="xhigh">极高</sp-menu-item>
                                         <sp-menu-item value="high">高</sp-menu-item>
                                         <sp-menu-item value="medium">中</sp-menu-item>
                                         <sp-menu-item value="low">低</sp-menu-item>
@@ -774,7 +769,9 @@ function getMainPanelHTML() {
                             </section>
                         </section>
 
-                        <section class="check-row">
+                        <section class="check-row check-row-end">
+                            <sp-checkbox id="transparentBackgroundCheckbox"></sp-checkbox>
+                            <sp-label for="transparentBackgroundCheckbox">透明背景</sp-label>
                             <sp-checkbox id="asyncCheckbox" checked></sp-checkbox>
                             <sp-label for="asyncCheckbox">异步任务</sp-label>
                         </section>
@@ -848,16 +845,8 @@ function getMainPanelHTML() {
                                 <sp-picker id="imageReverseModelPicker">
                                     <sp-menu id="imageReverseModelPickerMenu" slot="options">
                                         <sp-menu-item value="__pull_models__">一键获取模型</sp-menu-item>
-                                        <sp-menu-item value="custom">使用自定义模型</sp-menu-item>
                                     </sp-menu>
                                 </sp-picker>
-                            </section>
-                        </section>
-
-                        <section class="field-row">
-                            <section class="field">
-                                <sp-label for="imageReverseCustomModelInput">自定义模型</sp-label>
-                                <sp-textfield id="imageReverseCustomModelInput"></sp-textfield>
                             </section>
                         </section>
 

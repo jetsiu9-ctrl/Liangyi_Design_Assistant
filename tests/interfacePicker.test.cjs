@@ -5,7 +5,10 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 // Exercise the real handlers without requiring the Photoshop host or real credentials.
-function createHarness() {
+function createHarness(options = {}) {
+  // 允许用例自定义 /v1/models 的返回，用于验证拉取后的分池规则。
+  const pullResponse = options.pullResponse
+    || (() => [{ id: 'image-test' }, { id: 'text-test' }]);
   class Element {
     constructor() {
       this.children = [];
@@ -95,7 +98,7 @@ function createHarness() {
     persist: async () => { writes++; },
     request: async (url, options) => {
       requests.push({ url, options });
-      return { data: [{ id: 'image-test' }, { id: 'text-test' }] };
+      return { data: pullResponse() };
     }
   };
   const source = fs.readFileSync(path.join(__dirname, '../src/modules/aiAssistantModule.js'), 'utf8');
@@ -486,4 +489,48 @@ test('opening the add form from the plus button closes the interface list too', 
   assert.equal(h.el('interfacePickerMenu').classList.contains('is-hidden'), true);
   assert.equal(h.el('interfaceForm').classList.contains('is-hidden'), false);
   assert.equal(h.el('interfaceFormTitle').textContent, '新增接口');
+});
+
+// banana 系列（nano-banana 等）属于图像生成，必须在拉取分池时就进 imageModels。
+// 否则它会落进 reverseModels，被反推模块的两个接口排除后彻底从 UI 上消失。
+// 注意：池子经过 normalizeModelNames 处理，按小写字母序排列，故断言用 join 比较。
+test('拉取模型时 banana 归入图像生成池而非反推池', async () => {
+  const h = createHarness({
+    pullResponse: () => [
+      { id: 'nano-banana' },
+      { id: 'gemini-2.5-flash-image' },
+      { id: 'gemini-2.5-flash' },
+      { id: 'gpt-image-1' },
+      { id: 'gpt-4o' }
+    ]
+  });
+  await h.open();
+  await h.option('b').fire('contextmenu');
+  await h.el('pullModelsButton').fire('click');
+
+  const iface = h.state().interfaces[1];
+  assert.equal(iface.imageModels.join(','), 'gemini-2.5-flash-image,gpt-image-1,nano-banana');
+  assert.equal(iface.reverseModels.join(','), 'gemini-2.5-flash,gpt-4o');
+  assert.equal(iface.reverseModels.includes('nano-banana'), false, 'banana 不应出现在反推池');
+  // 没有任何模型因为两条规则同时被挡而丢失
+  assert.equal(iface.imageModels.length + iface.reverseModels.length, 5);
+});
+
+test('banana 判定大小写不敏感，且 image 规则不受影响', async () => {
+  const h = createHarness({
+    pullResponse: () => [
+      { id: 'Nano-Banana' },
+      { id: 'gemini-3-pro-banana-preview' },
+      { id: 'flux-banana-pro' },
+      { id: 'gemini-2.5-flash' }
+    ]
+  });
+  await h.open();
+  await h.option('b').fire('contextmenu');
+  await h.el('pullModelsButton').fire('click');
+
+  const iface = h.state().interfaces[1];
+  // 排序按小写比较，'Nano-Banana' 视为 'nano-banana' 排在最后；原始大小写被保留
+  assert.equal(iface.imageModels.join(','), 'flux-banana-pro,gemini-3-pro-banana-preview,Nano-Banana');
+  assert.equal(iface.reverseModels.join(','), 'gemini-2.5-flash');
 });
