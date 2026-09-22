@@ -20,9 +20,9 @@ const GENERATION_STATUS_INTERVAL_MS = 1000;
 const MODEL_PULL_TIMEOUT_MS = 30000;
 const MODEL_PULL_ACTION_VALUE = "__pull_models__";
 const MODEL_PULL_ACTION_LABEL = "一键获取模型";
+const MODEL_CUSTOM_VALUE = "__custom_model__";
+const MODEL_CUSTOM_LABEL = "使用自定义模型";
 const RESULT_LAYER_NAME_PREFIX = "\u51c9\u610fAI_";
-const PROMPT_MIN_ROWS = 6;
-const PROMPT_MAX_ROWS = 16;
 const SIZE_MAP = {
   "1:1": { "1k": "1024x1024", "2k": "2048x2048", "4k": "2880x2880" },
   "16:9": { "1k": "1280x720", "2k": "2560x1440", "4k": "3840x2160" },
@@ -309,6 +309,8 @@ function normalizeInterface(item, index) {
     imageModel: imageModels.includes(requestedImageModel)
       ? requestedImageModel
       : (imageModels[0] || ""),
+    customImageModel: String(item?.customImageModel || "").trim(),
+    useCustomImageModel: item?.useCustomImageModel === true,
     imageEndpointByModel: normalizeEndpointPreferences(item?.imageEndpointByModel)
   };
 }
@@ -358,9 +360,13 @@ function syncCurrentInterfaceFromFields() {
   if (provider === "openai" || provider === "gemini") {
     current.imageProvider = provider;
   }
-  if (imageModel && imageModel !== MODEL_PULL_ACTION_VALUE) {
+  if (imageModel === MODEL_CUSTOM_VALUE) {
+    current.useCustomImageModel = true;
+  } else if (imageModel && imageModel !== MODEL_PULL_ACTION_VALUE) {
+    current.useCustomImageModel = false;
     current.imageModel = imageModel;
   }
+  current.customImageModel = String(element("customModelInput").value || "").trim();
   const activeModel = getSelectedImageModelName();
   if (activeModel && (imageEndpoint === "generations" || imageEndpoint === "edits")) {
     current.imageEndpointByModel[activeModel] = imageEndpoint;
@@ -524,9 +530,22 @@ function getImageModelsForProvider(provider) {
 }
 
 function getSelectedImageModelName() {
-  const customModel = String(element("customModelInput").value || "").trim();
   const selectedModel = getPickerValue("modelPicker");
-  return customModel || (selectedModel === MODEL_PULL_ACTION_VALUE ? "" : selectedModel);
+  if (selectedModel === MODEL_CUSTOM_VALUE) {
+    return String(element("customModelInput").value || "").trim();
+  }
+  return selectedModel === MODEL_PULL_ACTION_VALUE ? "" : selectedModel;
+}
+
+// 自定义模型输入框平时收起，只有在下拉里主动选中「使用自定义模型」时才展开，
+// 避免它像以前那样无条件盖过下拉框的选择。
+function updateCustomModelFieldVisibility() {
+  const field = element("customModelField");
+  if (!field) {
+    return;
+  }
+  const isCustom = getPickerValue("modelPicker") === MODEL_CUSTOM_VALUE;
+  field.classList.toggle("is-hidden", !isCustom);
 }
 
 function renderImageModelPicker(preferredModel) {
@@ -551,12 +570,29 @@ function renderImageModelPicker(preferredModel) {
     }
     menu.appendChild(item);
   });
+
+  const customItem = document.createElement("sp-menu-item");
+  customItem.setAttribute("value", MODEL_CUSTOM_VALUE);
+  customItem.textContent = MODEL_CUSTOM_LABEL;
+  menu.appendChild(customItem);
+
   getCurrentInterface().imageModel = selectedModel;
   if (selectedModel) {
     setPickerValue("modelPicker", selectedModel);
   } else {
     clearPickerValue("modelPicker");
   }
+}
+
+// 重建下拉并按接口记录的状态恢复选择：优先「使用自定义模型」，否则用普通模型。
+// 是否使用自定义模型由 useCustomImageModel 显式记录，避免仅凭输入框有内容就抢占选择。
+function syncModelPickerSelection() {
+  const current = getCurrentInterface();
+  renderImageModelPicker(current.imageModel);
+  if (current.useCustomImageModel) {
+    setPickerValue("modelPicker", MODEL_CUSTOM_VALUE);
+  }
+  updateCustomModelFieldVisibility();
 }
 
 function getSavedImageEndpoint(model) {
@@ -575,7 +611,8 @@ function updateImageProviderUi() {
 function applyImageGenerationPreferences() {
   const current = getCurrentInterface();
   setPickerValue("imageProviderPicker", current.imageProvider || DEFAULT_IMAGE_PROVIDER);
-  renderImageModelPicker(current.imageModel);
+  element("customModelInput").value = String(current.customImageModel || "");
+  syncModelPickerSelection();
   const model = getSelectedImageModelName();
   setPickerValue("imageEndpointPicker", getSavedImageEndpoint(model));
   updateImageProviderUi();
@@ -863,6 +900,9 @@ function parseInteger(value, fallback) {
 function getModelValue() {
   const model = getSelectedImageModelName();
   if (!model) {
+    if (getPickerValue("modelPicker") === MODEL_CUSTOM_VALUE) {
+      throw new Error("已选择「使用自定义模型」，请先填写自定义模型名称。");
+    }
     throw new Error("请先在模型下拉框中点击“一键获取模型”，并选择一个图像模型。");
   }
   return model;
@@ -1267,7 +1307,7 @@ async function pullModelsForInterface(target) {
     interfaceItem.imageModel = imageModels[0] || "";
   }
   if (interfaceItem.id === settings.currentInterfaceId) {
-    renderImageModelPicker(interfaceItem.imageModel);
+    syncModelPickerSelection();
     setPickerValue("imageEndpointPicker", getSavedImageEndpoint(getSelectedImageModelName()));
   }
   hideInterfaceActionMenu();
@@ -1307,7 +1347,7 @@ async function triggerModelPullFromImagePicker(event) {
   try {
     await pullModelsWithUi();
   } catch (error) {
-    renderImageModelPicker(getCurrentInterface().imageModel);
+    syncModelPickerSelection();
     setStatus(`模型拉取失败：${error.message}`);
   }
 }
@@ -1689,33 +1729,8 @@ function renderReferences() {
   }
 }
 
-function countPromptLineUnits(line) {
-  let units = 0;
-  Array.from(line || "").forEach((char) => {
-    units += /[\u0000-\u00ff]/u.test(char) ? 0.55 : 1;
-  });
-  return Math.max(1, units);
-}
-
-function updatePromptRows() {
-  const promptInput = element("promptInput");
-  const width = promptInput.clientWidth || 320;
-  const unitsPerRow = Math.max(14, Math.floor(width / 12));
-  const lines = String(promptInput.value || "").split(/\r?\n/u);
-  const estimatedRows = lines.reduce((total, line) => {
-    return total + Math.ceil(countPromptLineUnits(line) / unitsPerRow);
-  }, 0);
-  const nextRows = Math.min(PROMPT_MAX_ROWS, Math.max(PROMPT_MIN_ROWS, estimatedRows));
-  promptInput.setAttribute("rows", String(nextRows));
-}
-
-function bindPromptAutoRows() {
-  const promptInput = element("promptInput");
-  promptInput.addEventListener("input", updatePromptRows);
-  window.addEventListener("resize", updatePromptRows);
-  updatePromptRows();
-}
-
+// 提示词框改为固定高度 + 内部滚动（见 aiAssistant.css），不再按内容估算行数，
+// 避免长提示词把下方字段和「开始生成」按钮整体推走。
 async function submitTextToImage(prompt, timeoutState) {
   const model = getModelValue();
   refreshGenerationStatus(timeoutState, `正在通过 Generations 提交请求：模型 ${model}，尺寸 ${getActualSize()}`);
@@ -2367,7 +2382,7 @@ function bindEvents() {
         const provider = readPickerDomValue(element("imageProviderPicker")) || DEFAULT_IMAGE_PROVIDER;
         setPickerValue("imageProviderPicker", provider);
         getCurrentInterface().imageProvider = provider;
-        renderImageModelPicker(getCurrentInterface().imageModel);
+        syncModelPickerSelection();
         setPickerValue("imageEndpointPicker", getSavedImageEndpoint(getSelectedImageModelName()));
         updateImageProviderUi();
         await persistSettings();
@@ -2388,8 +2403,21 @@ function bindEvents() {
           await triggerModelPullFromImagePicker();
           return;
         }
+        if (model === MODEL_CUSTOM_VALUE) {
+          setPickerValue("modelPicker", MODEL_CUSTOM_VALUE);
+          getCurrentInterface().useCustomImageModel = true;
+          updateCustomModelFieldVisibility();
+          const customModel = getSelectedImageModelName();
+          if (customModel) {
+            setPickerValue("imageEndpointPicker", getSavedImageEndpoint(customModel));
+          }
+          await persistSettings();
+          return;
+        }
         setPickerValue("modelPicker", model);
         getCurrentInterface().imageModel = model;
+        getCurrentInterface().useCustomImageModel = false;
+        updateCustomModelFieldVisibility();
         setPickerValue("imageEndpointPicker", getSavedImageEndpoint(getSelectedImageModelName()));
         await persistSettings();
       } catch (error) {
@@ -2420,8 +2448,14 @@ function bindEvents() {
     element("imageEndpointPicker").addEventListener(eventName, syncImageEndpoint);
   });
 
-  element("customModelInput").addEventListener("change", () => {
+  element("customModelInput").addEventListener("change", async () => {
+    getCurrentInterface().customImageModel = String(element("customModelInput").value || "").trim();
     setPickerValue("imageEndpointPicker", getSavedImageEndpoint(getSelectedImageModelName()));
+    try {
+      await persistSettings();
+    } catch (error) {
+      setStatus(`无法保存自定义模型：${error.message}`);
+    }
   });
 
   element("generateButton").addEventListener("click", async () => {
@@ -2552,7 +2586,6 @@ async function initAIAssistant() {
   aiAssistantInitialized = true;
   bindEvents();
   bindPickers();
-  bindPromptAutoRows();
   initializePickerDefaults();
   renderReferences();
   updateImageProviderUi();

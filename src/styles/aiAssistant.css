@@ -344,6 +344,25 @@
     width: 100%;
 }
 
+/* 提示词框：固定高度 + 内部滚动。
+   与反推面板 #imageReverseResultText 采用同一套做法，编辑长提示词时
+   不再随内容把下方字段和「开始生成」整体推走。 */
+.ai-assistant-panel #promptInput,
+.ai-assistant-panel #imageReversePromptInput {
+    display: block;
+    width: 100%;
+    height: 200px;
+    min-height: 200px;
+    max-height: 200px;
+    line-height: 1.5;
+}
+
+.ai-assistant-panel #imageReversePromptInput {
+    height: 150px;
+    min-height: 150px;
+    max-height: 150px;
+}
+
 .ai-assistant-panel sp-label {
     color: var(--text-muted);
     font-family: var(--font-ui);

@@ -675,15 +675,8 @@ function getMainPanelHTML() {
                             </section>
                         </section>
 
-                        <section class="field-row">
-                            <section class="field">
-                                <sp-label for="customModelInput">自定义模型</sp-label>
-                                <sp-textfield id="customModelInput"></sp-textfield>
-                            </section>
-                        </section>
-
                         <sp-label for="promptInput">提示词</sp-label>
-                        <sp-textarea id="promptInput" rows="6"></sp-textarea>
+                        <sp-textarea id="promptInput" rows="10"></sp-textarea>
 
                         <section class="field-row">
                             <section class="field">
@@ -713,8 +706,16 @@ function getMainPanelHTML() {
                                 <sp-picker id="modelPicker">
                                     <sp-menu id="modelPickerMenu" slot="options">
                                         <sp-menu-item value="__pull_models__">一键获取模型</sp-menu-item>
+                                        <sp-menu-item value="__custom_model__">使用自定义模型</sp-menu-item>
                                     </sp-menu>
                                 </sp-picker>
+                            </section>
+                        </section>
+
+                        <section id="customModelField" class="field-row is-hidden">
+                            <section class="field">
+                                <sp-label for="customModelInput">自定义模型名称</sp-label>
+                                <sp-textfield id="customModelInput" placeholder="填写接口支持的模型名，例如 dall-e-3"></sp-textfield>
                             </section>
                         </section>
                         <sp-body class="info-text" size="S">Generations 支持文生图和中转站兼容的参考图生图；Edits 至少需要一张参考图。Gemini 使用 generateContent。</sp-body>
@@ -862,7 +863,7 @@ function getMainPanelHTML() {
 
                         <section class="field image-reverse-prompt-field">
                             <sp-label for="imageReversePromptInput">提示词</sp-label>
-                            <sp-textarea id="imageReversePromptInput" rows="5"></sp-textarea>
+                            <sp-textarea id="imageReversePromptInput" rows="7"></sp-textarea>
                         </section>
 
                         <section class="button-row image-reverse-submit-row">
